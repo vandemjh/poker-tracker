@@ -99,11 +99,6 @@ Jack L,$61.50,34.25,95.75,47.88,...
 
 **Chart Library Recommendation**: Chart.js, Recharts, or D3.js
 
-**Additional Views**:
-- Bar chart: Session-by-session results for selected player
-- Distribution chart: Histogram of session results
-- Head-to-head comparison: Side-by-side player comparison
-
 ### 3.3 Play Module (Live Game Management)
 
 #### 3.3.1 Game Session Creation
@@ -161,7 +156,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 1. Enter cash-out amount for each player
 2. System calculates profit/loss (cash-out minus buy-ins)
 3. Validate zero-sum (total profit/loss = $0)
-4. Save session to database
+4. Save session to Google Sheet
 5. Update player statistics
 6. Generate session summary report
 

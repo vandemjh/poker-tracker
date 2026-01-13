@@ -1,0 +1,140 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-nb-cream text-nb-black min-h-screen;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    @apply font-bold;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl;
+  }
+
+  h2 {
+    @apply text-2xl md:text-3xl;
+  }
+
+  h3 {
+    @apply text-xl md:text-2xl;
+  }
+}
+
+@layer components {
+  /* Neo-brutalist button */
+  .btn-nb {
+    @apply px-6 py-3 font-semibold border-3 border-nb-black bg-nb-white shadow-nb;
+    @apply transition-all duration-100 ease-in-out;
+    @apply hover:shadow-nb-hover hover:translate-x-[2px] hover:translate-y-[2px];
+    @apply active:shadow-nb-active active:translate-x-[4px] active:translate-y-[4px];
+  }
+
+  .btn-nb-primary {
+    @apply btn-nb bg-nb-yellow;
+  }
+
+  .btn-nb-secondary {
+    @apply btn-nb bg-nb-blue text-nb-white;
+  }
+
+  .btn-nb-success {
+    @apply btn-nb bg-nb-green;
+  }
+
+  .btn-nb-danger {
+    @apply btn-nb bg-nb-red text-nb-white;
+  }
+
+  .btn-nb-disabled {
+    @apply btn-nb bg-gray-300 cursor-not-allowed;
+    @apply hover:shadow-nb hover:translate-x-0 hover:translate-y-0;
+  }
+
+  /* Neo-brutalist card */
+  .card-nb {
+    @apply bg-nb-white border-3 border-nb-black shadow-nb p-4 md:p-6;
+  }
+
+  /* Neo-brutalist input */
+  .input-nb {
+    @apply w-full px-4 py-3 border-3 border-nb-black bg-nb-white;
+    @apply focus:outline-none focus:ring-2 focus:ring-nb-yellow;
+    @apply placeholder:text-gray-400;
+  }
+
+  /* Neo-brutalist select */
+  .select-nb {
+    @apply w-full px-4 py-3 border-3 border-nb-black bg-nb-white;
+    @apply focus:outline-none focus:ring-2 focus:ring-nb-yellow;
+    @apply appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+  }
+
+  /* Neo-brutalist badge */
+  .badge-nb {
+    @apply inline-flex items-center px-3 py-1 text-sm font-semibold border-2 border-nb-black;
+  }
+
+  /* Neo-brutalist table */
+  .table-nb {
+    @apply w-full border-collapse border-3 border-nb-black;
+  }
+
+  .table-nb th {
+    @apply bg-nb-black text-nb-white px-4 py-3 text-left font-semibold border-b-3 border-nb-black;
+  }
+
+  .table-nb td {
+    @apply px-4 py-3 border-b-2 border-nb-black bg-nb-white;
+  }
+
+  .table-nb tr:hover td {
+    @apply bg-nb-yellow bg-opacity-20;
+  }
+
+  /* Status indicators */
+  .status-positive {
+    @apply text-nb-green;
+  }
+
+  .status-negative {
+    @apply text-nb-red;
+  }
+
+  .status-neutral {
+    @apply text-nb-black;
+  }
+}
+
+@layer utilities {
+  /* Money formatting utilities */
+  .money-positive::before {
+    content: '+$';
+  }
+
+  .money-negative::before {
+    content: '-$';
+  }
+}
