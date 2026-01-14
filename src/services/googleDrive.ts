@@ -299,7 +299,9 @@ class GoogleDriveService {
     }
   }
 
-  // Append a new session column to the rightmost side of the spreadsheet
+  // Append or update a session column in the spreadsheet
+  // If a column with the same date exists, it updates that column
+  // Otherwise, it appends a new column to the right
   async appendSessionColumn(
     spreadsheetId: string,
     sessionDate: Date,
@@ -329,13 +331,44 @@ class GoogleDriveService {
         throw new Error('Spreadsheet is empty');
       }
 
-      // Find the rightmost column with data
+      // Format the date string for comparison
+      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+
+      // Check if a column with this date already exists
+      const headerRow = rows[0] || [];
+      let existingColIndex = -1;
+
+      for (let i = 1; i < headerRow.length; i++) {
+        const headerValue = headerRow[i];
+        let headerDateStr = '';
+
+        // Handle both string dates and serial number dates
+        if (typeof headerValue === 'number') {
+          // Convert serial date to date string
+          const serialDate = this.serialDateToDate(headerValue);
+          if (serialDate) {
+            headerDateStr = `${serialDate.getMonth() + 1}/${serialDate.getDate()}/${serialDate.getFullYear()}`;
+          }
+        } else if (typeof headerValue === 'string') {
+          headerDateStr = headerValue.trim();
+        }
+
+        if (headerDateStr === dateStr) {
+          existingColIndex = i;
+          break;
+        }
+      }
+
+      // Find the rightmost column with data (for appending new column)
       let maxCol = 0;
       for (const row of rows) {
         if (row.length > maxCol) {
           maxCol = row.length;
         }
       }
+
+      // Use existing column if found, otherwise append to the right
+      const targetColIndex = existingColIndex !== -1 ? existingColIndex : maxCol;
 
       // Create a map of player names to row indices (case-insensitive)
       const playerRowMap = new Map<string, number>();
@@ -345,10 +378,6 @@ class GoogleDriveService {
           playerRowMap.set(playerName, i);
         }
       }
-
-      // Build the column data
-      // First cell is the date header (as MM/DD/YYYY string)
-      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
 
       // Create column values array with the date in the header row
       const columnValues: (string | number)[][] = [[dateStr]];
@@ -380,10 +409,10 @@ class GoogleDriveService {
       }
 
       // Convert column index to letter (A, B, C, ... AA, AB, etc.)
-      const colLetter = this.columnIndexToLetter(maxCol);
+      const colLetter = this.columnIndexToLetter(targetColIndex);
       const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
 
-      // Write the new column
+      // Write the column (either new or updating existing)
       await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
         {
@@ -420,11 +449,27 @@ class GoogleDriveService {
         );
       }
 
-      console.log('Successfully appended session to spreadsheet');
+      console.log(existingColIndex !== -1
+        ? 'Successfully updated existing session in spreadsheet'
+        : 'Successfully appended new session to spreadsheet');
     } catch (error) {
-      console.error('Error appending session to spreadsheet:', error);
+      console.error('Error saving session to spreadsheet:', error);
       throw error;
     }
+  }
+
+  // Helper to convert serial date to Date object
+  private serialDateToDate(serial: number): Date | null {
+    if (serial < 1 || serial > 100000) {
+      return null;
+    }
+    const millisecondsPerDay = 24 * 60 * 60 * 1000;
+    const date = new Date((serial - 25569) * millisecondsPerDay);
+    const year = date.getFullYear();
+    if (year >= 1990 && year <= 2100) {
+      return date;
+    }
+    return null;
   }
 
   // Helper to convert column index (0-based) to column letter
