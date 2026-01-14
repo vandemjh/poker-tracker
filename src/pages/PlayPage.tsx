@@ -13,14 +13,14 @@ import {
   setActiveSession,
   removePlayerFromSession,
   markUnsyncedChanges,
-  setPlayers,
+  mergePlayers,
   replaceImportedSessions,
   clearUnsyncedChanges,
   setSyncStatus,
 } from '../store';
 import { formatMoney, formatMoneyWithSign, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
-import { parseSpreadsheetData } from '../utils/csvImport';
+import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
 
 // Helper to save session data to localStorage for resume feature
@@ -218,12 +218,18 @@ const PlayPage: React.FC = () => {
 
         console.log('Session saved to Google Sheet successfully');
 
+        // Mark the local session as complete (keeps it for resume feature)
+        dispatch(completeSession(activeSessionId));
+
         // Sync from spreadsheet to ensure local state matches
         try {
           const spreadsheetData = await googleDriveService.getSpreadsheetData(importedSpreadsheetId);
-          const result = parseSpreadsheetData(spreadsheetData);
+          const parsedResult = parseSpreadsheetData(spreadsheetData);
 
-          dispatch(setPlayers(result.players));
+          // Remap player IDs to match existing players
+          const result = remapPlayerIds(parsedResult, players);
+
+          dispatch(mergePlayers(result.players));
           dispatch(replaceImportedSessions({
             sessions: result.sessions,
             playerSessions: result.playerSessions,

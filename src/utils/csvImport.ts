@@ -447,6 +447,51 @@ export function generateImportReport(result: ParsedCSVData): CSVImportResult {
   };
 }
 
+// Remap player IDs in parsed data to match existing players (by name)
+// This ensures imported sessions reference the correct player IDs
+export function remapPlayerIds(
+  parsedData: ParsedCSVData,
+  existingPlayers: Player[]
+): ParsedCSVData {
+  // Build a map of existing player names to their IDs
+  const existingPlayerByName = new Map(
+    existingPlayers.map(p => [p.name.toLowerCase(), p.id])
+  );
+
+  // Build a map of parsed player IDs to the correct IDs (existing or new)
+  const idMapping = new Map<string, string>();
+  const remappedPlayers: Player[] = [];
+
+  for (const parsedPlayer of parsedData.players) {
+    const existingId = existingPlayerByName.get(parsedPlayer.name.toLowerCase());
+    if (existingId) {
+      // Use existing player ID
+      idMapping.set(parsedPlayer.id, existingId);
+      // Don't add to remappedPlayers - we'll keep the existing one
+    } else {
+      // New player, keep the parsed ID
+      idMapping.set(parsedPlayer.id, parsedPlayer.id);
+      remappedPlayers.push(parsedPlayer);
+    }
+  }
+
+  // Also add existing players to the result (they won't be in parsedData.players)
+  // The mergePlayers action will handle deduplication
+  const allPlayers = [...existingPlayers, ...remappedPlayers];
+
+  // Remap player IDs in playerSessions
+  const remappedPlayerSessions = parsedData.playerSessions.map(ps => ({
+    ...ps,
+    playerId: idMapping.get(ps.playerId) || ps.playerId,
+  }));
+
+  return {
+    ...parsedData,
+    players: allPlayers,
+    playerSessions: remappedPlayerSessions,
+  };
+}
+
 export function generateErrorLog(errors: CSVImportError[], warnings: CSVImportWarning[]): string {
   let log = 'CSV Import Error Log\n';
   log += '=====================\n\n';

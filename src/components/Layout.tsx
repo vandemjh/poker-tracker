@@ -1,18 +1,19 @@
 import React, { useState, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
-import { toggleImportModal, setPlayers, replaceImportedSessions, clearUnsyncedChanges, setSyncStatus } from '../store';
+import { toggleImportModal, mergePlayers, replaceImportedSessions, clearUnsyncedChanges, setSyncStatus } from '../store';
 import GoogleAuthButton from './GoogleAuthButton';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
 import { googleDriveService } from '../services/googleDrive';
-import { parseSpreadsheetData } from '../utils/csvImport';
+import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 
 const Layout: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const { players } = useAppSelector(state => state.players);
   const { activeSessionId } = useAppSelector(state => state.sessions);
   const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(state => state.ui);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -27,10 +28,13 @@ const Layout: React.FC = () => {
     try {
       setIsSyncing(true);
       const spreadsheetData = await googleDriveService.getSpreadsheetData(importedSpreadsheetId);
-      const result = parseSpreadsheetData(spreadsheetData);
+      const parsedResult = parseSpreadsheetData(spreadsheetData);
+
+      // Remap player IDs to match existing players
+      const result = remapPlayerIds(parsedResult, players);
 
       // Replace all players and imported sessions with fresh data from spreadsheet
-      dispatch(setPlayers(result.players));
+      dispatch(mergePlayers(result.players));
       dispatch(replaceImportedSessions({
         sessions: result.sessions,
         playerSessions: result.playerSessions,
@@ -49,7 +53,7 @@ const Layout: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [dispatch, importedSpreadsheetId, isGoogleConnected]);
+  }, [dispatch, importedSpreadsheetId, isGoogleConnected, players]);
 
   const handleTitleClick = () => {
     if (activeSessionId) {

@@ -7,28 +7,32 @@ import {
   setSyncStatus,
   setLoading,
   setError,
-  setPlayers,
+  mergePlayers,
   replaceImportedSessions,
   setImportedSpreadsheetId,
   setInitializing,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
-import { parseSpreadsheetData } from '../utils/csvImport';
+import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 
 const GoogleAuthButton: React.FC = () => {
   const dispatch = useAppDispatch();
   const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(state => state.ui);
+  const { players } = useAppSelector(state => state.players);
 
   const [showDropdown, setShowDropdown] = useState(false);
 
   // Helper function to sync from spreadsheet
-  const syncFromSpreadsheet = async (spreadsheetId: string) => {
+  const syncFromSpreadsheet = async (spreadsheetId: string, existingPlayers: typeof players = []) => {
     try {
       const spreadsheetData = await googleDriveService.getSpreadsheetData(spreadsheetId);
-      const result = parseSpreadsheetData(spreadsheetData);
+      const parsedResult = parseSpreadsheetData(spreadsheetData);
+
+      // Remap player IDs to match existing players
+      const result = remapPlayerIds(parsedResult, existingPlayers);
 
       // Replace all data with spreadsheet data
-      dispatch(setPlayers(result.players));
+      dispatch(mergePlayers(result.players));
       dispatch(replaceImportedSessions({
         sessions: result.sessions,
         playerSessions: result.playerSessions,

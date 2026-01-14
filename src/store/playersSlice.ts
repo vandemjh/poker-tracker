@@ -45,8 +45,41 @@ const playersSlice = createSlice({
       );
       state.players.push(...newPlayers);
     },
+    mergePlayers: (state, action: PayloadAction<Player[]>) => {
+      // Merge incoming players with existing ones, preserving existing IDs
+      const existingByName = new Map(
+        state.players.map(p => [p.name.toLowerCase(), p])
+      );
+
+      const mergedPlayers: Player[] = [];
+      const seenNames = new Set<string>();
+
+      // First, process incoming players
+      for (const incoming of action.payload) {
+        const nameLower = incoming.name.toLowerCase();
+        const existing = existingByName.get(nameLower);
+
+        if (existing) {
+          // Keep existing player (preserves local ID)
+          mergedPlayers.push(existing);
+        } else {
+          // Add new player from import
+          mergedPlayers.push(incoming);
+        }
+        seenNames.add(nameLower);
+      }
+
+      // Keep any local players that weren't in the import
+      for (const existing of state.players) {
+        if (!seenNames.has(existing.name.toLowerCase())) {
+          mergedPlayers.push(existing);
+        }
+      }
+
+      state.players = mergedPlayers;
+    },
   },
 });
 
-export const { setPlayers, addPlayer, updatePlayer, deletePlayer, importPlayers } = playersSlice.actions;
+export const { setPlayers, addPlayer, updatePlayer, deletePlayer, importPlayers, mergePlayers } = playersSlice.actions;
 export default playersSlice.reducer;
