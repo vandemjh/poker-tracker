@@ -1,19 +1,48 @@
-import React from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useCallback } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
-import { toggleImportModal } from '../store';
+import { toggleImportModal, setPlayers, replaceImportedSessions, markUnsyncedChanges } from '../store';
 import GoogleAuthButton from './GoogleAuthButton';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
+import { googleDriveService } from '../services/googleDrive';
+import { parseSpreadsheetData } from '../utils/csvImport';
 
 const Layout: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { activeSessionId } = useAppSelector(state => state.sessions);
+  const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(state => state.ui);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isSettingsActive = location.pathname === '/settings';
 
   // Initialize theme
   useTheme();
+
+  const handleManualSync = useCallback(async () => {
+    if (!importedSpreadsheetId || !isGoogleConnected) return;
+
+    try {
+      setIsSyncing(true);
+      const spreadsheetData = await googleDriveService.getSpreadsheetData(importedSpreadsheetId);
+      const result = parseSpreadsheetData(spreadsheetData);
+
+      // Replace all players and imported sessions with fresh data from spreadsheet
+      dispatch(setPlayers(result.players));
+      dispatch(replaceImportedSessions({
+        sessions: result.sessions,
+        playerSessions: result.playerSessions,
+      }));
+      dispatch(markUnsyncedChanges());
+    } catch (error) {
+      console.error('Error syncing from spreadsheet:', error);
+      alert(`Failed to sync from Google Sheet: ${error}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [dispatch, importedSpreadsheetId, isGoogleConnected]);
 
   const handleTitleClick = () => {
     if (activeSessionId) {
@@ -50,9 +79,10 @@ const Layout: React.FC = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleTitleClick}
-                className="text-2xl md:text-3xl font-bold hover:text-nb-blue transition-colors text-left"
+                className="text-3xl md:text-4xl hover:scale-110 transition-transform text-left"
+                title="Poker Tracker"
               >
-                Poker Tracker
+                🃏
               </button>
               <SyncStatusIndicator />
             </div>
@@ -73,15 +103,45 @@ const Layout: React.FC = () => {
               >
                 Play
               </NavLink>
+              {importedSpreadsheetId ? (
+                <button
+                  onClick={handleManualSync}
+                  disabled={isSyncing || !isGoogleConnected}
+                  className={`px-4 py-2 font-semibold border-3 bg-nb-green text-nb-black hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100 min-w-[80px] text-center ${isSyncing ? 'opacity-50 cursor-wait' : ''}`}
+                  style={{
+                    borderColor: 'var(--color-border)',
+                    boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+                  }}
+                >
+                  {isSyncing ? 'Syncing...' : 'Sync'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => dispatch(toggleImportModal())}
+                  className="px-4 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100 min-w-[80px] text-center"
+                  style={{
+                    borderColor: 'var(--color-border)',
+                    boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+                  }}
+                >
+                  Link
+                </button>
+              )}
               <button
-                onClick={() => dispatch(toggleImportModal())}
-                className="px-4 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100 min-w-[80px] text-center"
+                onClick={() => navigate('/settings')}
+                className={`w-10 h-10 flex items-center justify-center border-3 transition-all duration-100 ${
+                  isSettingsActive
+                    ? 'bg-nb-yellow text-nb-black translate-x-[2px] translate-y-[2px]'
+                    : 'hover:translate-x-[1px] hover:translate-y-[1px]'
+                }`}
                 style={{
                   borderColor: 'var(--color-border)',
-                  boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+                  backgroundColor: isSettingsActive ? undefined : 'var(--color-bg-card)',
+                  boxShadow: isSettingsActive ? '0px 0px 0px 0px var(--color-shadow)' : '2px 2px 0px 0px var(--color-shadow)',
                 }}
+                title="Settings"
               >
-                Link
+                <span className="text-lg">⚙️</span>
               </button>
               <ThemeToggle />
               <GoogleAuthButton />

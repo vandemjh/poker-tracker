@@ -11,17 +11,17 @@ import {
   setSessions,
   setPlayerSessions,
   setImportedSpreadsheetId,
+  setInitializing,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
 
 const GoogleAuthButton: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isGoogleConnected, googleUser } = useAppSelector(state => state.ui);
+  const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(state => state.ui);
   const { players } = useAppSelector(state => state.players);
   const { sessions } = useAppSelector(state => state.sessions);
 
   const [showDropdown, setShowDropdown] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(true);
 
   // Try to restore session on mount
   useEffect(() => {
@@ -71,11 +71,11 @@ const GoogleAuthButton: React.FC = () => {
         }
       }
 
-      setIsRestoring(false);
+      dispatch(setInitializing(false));
     };
 
     restoreSession();
-  }, []); // Only run once on mount
+  }, [dispatch]); // Only run once on mount
 
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
@@ -133,7 +133,7 @@ const GoogleAuthButton: React.FC = () => {
   };
 
   // Show loading state while restoring
-  if (isRestoring) {
+  if (isInitializing) {
     return (
       <div className="w-10 h-10 rounded-full bg-theme-card animate-pulse border-3" style={{ borderColor: 'var(--color-border)' }} />
     );

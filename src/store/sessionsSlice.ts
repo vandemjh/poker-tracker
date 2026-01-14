@@ -110,6 +110,22 @@ const sessionsSlice = createSlice({
         state.activeSessionId = null;
       }
     },
+    resumeCompletedSession: (state, action: PayloadAction<string>) => {
+      const session = state.sessions.find(s => s.id === action.payload);
+      if (session && session.isComplete && !session.isImported) {
+        session.isComplete = false;
+        session.updatedAt = new Date().toISOString();
+        state.activeSessionId = session.id;
+
+        // Reset all player cash-outs for this session
+        state.playerSessions.forEach(ps => {
+          if (ps.sessionId === session.id) {
+            ps.cashOut = undefined;
+            ps.netResult = 0;
+          }
+        });
+      }
+    },
     deleteSession: (state, action: PayloadAction<string>) => {
       const sessionId = action.payload;
       const session = state.sessions.find(s => s.id === sessionId);
@@ -130,6 +146,27 @@ const sessionsSlice = createSlice({
       playerSessions: PlayerSession[];
     }>) => {
       // Add imported sessions
+      state.sessions.push(...action.payload.sessions);
+      state.playerSessions.push(...action.payload.playerSessions);
+    },
+    replaceImportedSessions: (state, action: PayloadAction<{
+      sessions: Session[];
+      playerSessions: PlayerSession[];
+    }>) => {
+      // Remove all imported sessions and their player sessions
+      const importedSessionIds = new Set(
+        state.sessions.filter(s => s.isImported).map(s => s.id)
+      );
+
+      // Keep only non-imported sessions
+      state.sessions = state.sessions.filter(s => !s.isImported);
+
+      // Keep only player sessions from non-imported sessions
+      state.playerSessions = state.playerSessions.filter(
+        ps => !importedSessionIds.has(ps.sessionId)
+      );
+
+      // Add new imported sessions
       state.sessions.push(...action.payload.sessions);
       state.playerSessions.push(...action.payload.playerSessions);
     },
@@ -157,8 +194,10 @@ export const {
   addBuyIn,
   setCashOut,
   completeSession,
+  resumeCompletedSession,
   deleteSession,
   importSessions,
+  replaceImportedSessions,
   removePlayerFromSession,
 } = sessionsSlice.actions;
 export default sessionsSlice.reducer;

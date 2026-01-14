@@ -9,6 +9,7 @@ import { googleDriveService } from './services/googleDrive';
 import Layout from './components/Layout';
 import ResultsPage from './pages/ResultsPage';
 import PlayPage from './pages/PlayPage';
+import SettingsPage from './pages/SettingsPage';
 import CSVImportModal from './components/CSVImportModal';
 
 // Google OAuth Client ID - Replace with your own
@@ -84,6 +85,7 @@ function AppContent() {
         <Route path="/" element={<Layout />}>
           <Route index element={<ResultsPage />} />
           <Route path="play" element={<PlayPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>
       <CSVImportModal />

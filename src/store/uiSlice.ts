@@ -10,8 +10,13 @@ interface GoogleUserInfo {
 
 type Theme = 'system' | 'light' | 'dark';
 
+interface Settings {
+  defaultBuyIn: number;
+}
+
 interface UIState {
   isLoading: boolean;
+  isInitializing: boolean; // True while checking for stored data on app load
   error: string | null;
   showImportModal: boolean;
   dateFilter: DateRangeFilter;
@@ -23,10 +28,12 @@ interface UIState {
   googleUser: GoogleUserInfo | null;
   importedSpreadsheetId: string | null; // Track the Google Sheet we imported from
   theme: Theme;
+  settings: Settings;
 }
 
 const initialState: UIState = {
   isLoading: false,
+  isInitializing: true, // Start as true, set to false once initialization is complete
   error: null,
   showImportModal: false,
   dateFilter: {
@@ -46,6 +53,9 @@ const initialState: UIState = {
   googleUser: null,
   importedSpreadsheetId: null,
   theme: 'system',
+  settings: {
+    defaultBuyIn: 30,
+  },
 };
 
 const uiSlice = createSlice({
@@ -124,6 +134,15 @@ const uiSlice = createSlice({
     setTheme: (state, action: PayloadAction<Theme>) => {
       state.theme = action.payload;
     },
+    setInitializing: (state, action: PayloadAction<boolean>) => {
+      state.isInitializing = action.payload;
+    },
+    setDefaultBuyIn: (state, action: PayloadAction<number>) => {
+      state.settings.defaultBuyIn = action.payload;
+    },
+    setSettings: (state, action: PayloadAction<Partial<Settings>>) => {
+      state.settings = { ...state.settings, ...action.payload };
+    },
   },
 });
 
@@ -147,5 +166,8 @@ export const {
   clearUnsyncedChanges,
   setImportedSpreadsheetId,
   setTheme,
+  setInitializing,
+  setDefaultBuyIn,
+  setSettings,
 } = uiSlice.actions;
 export default uiSlice.reducer;

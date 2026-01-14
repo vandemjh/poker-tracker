@@ -439,6 +439,155 @@ class GoogleDriveService {
 
     return letter;
   }
+
+  // Update or create an "In Progress" session column
+  async updateInProgressSession(
+    spreadsheetId: string,
+    sessionDate: Date,
+    playerBuyIns: { playerName: string; totalBuyIn: number }[],
+    isComplete: boolean = false
+  ): Promise<void> {
+    try {
+      // Get spreadsheet metadata
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      );
+      const metadata = await metaResponse.json();
+
+      if (!metadata.sheets || metadata.sheets.length === 0) {
+        throw new Error('Spreadsheet has no sheets');
+      }
+
+      const firstSheetName = metadata.sheets[0].properties.title;
+
+      // Get existing data
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      );
+      const existingData = await dataResponse.json();
+      const rows: (string | number)[][] = existingData.values || [];
+
+      if (rows.length === 0) {
+        throw new Error('Spreadsheet is empty');
+      }
+
+      // Format dates
+      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+      const inProgressHeader = `${dateStr} In Progress`;
+      const finalHeader = dateStr;
+
+      // Find existing column for this session (either "In Progress" or final)
+      let existingColIndex = -1;
+      const headerRow = rows[0] || [];
+
+      for (let i = 0; i < headerRow.length; i++) {
+        const header = String(headerRow[i] || '').trim();
+        if (header === inProgressHeader || header === finalHeader) {
+          existingColIndex = i;
+          break;
+        }
+      }
+
+      // If no existing column, find the rightmost column
+      let targetColIndex = existingColIndex;
+      if (targetColIndex === -1) {
+        let maxCol = 0;
+        for (const row of rows) {
+          if (row.length > maxCol) {
+            maxCol = row.length;
+          }
+        }
+        targetColIndex = maxCol;
+      }
+
+      // Create a map of player names to row indices (case-insensitive)
+      const playerRowMap = new Map<string, number>();
+      for (let i = 1; i < rows.length; i++) {
+        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        if (playerName) {
+          playerRowMap.set(playerName, i);
+        }
+      }
+
+      // Header is "In Progress" during game, just date when complete
+      const headerValue = isComplete ? finalHeader : inProgressHeader;
+
+      // Build column values - during play, show buy-in amounts (negative since it's money in)
+      const columnValues: (string | number)[] = [headerValue];
+
+      // Fill in player buy-in amounts
+      for (let i = 1; i < rows.length; i++) {
+        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        const result = playerBuyIns.find(
+          pr => pr.playerName.toLowerCase() === playerName
+        );
+
+        if (result) {
+          // During active session, show negative buy-in (money on table)
+          // When complete, this will be called with final netResult instead
+          columnValues.push(result.totalBuyIn);
+        } else {
+          columnValues.push('');
+        }
+      }
+
+      // Check for new players not in the spreadsheet
+      const existingPlayers = new Set(playerRowMap.keys());
+      const newPlayers = playerBuyIns.filter(
+        pr => !existingPlayers.has(pr.playerName.toLowerCase())
+      );
+
+      // Add new players to the column
+      for (const newPlayer of newPlayers) {
+        columnValues.push(newPlayer.totalBuyIn);
+      }
+
+      // Write the column
+      const colLetter = this.columnIndexToLetter(targetColIndex);
+      const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
+
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            range,
+            majorDimension: 'COLUMNS',
+            values: [columnValues],
+          }),
+        }
+      );
+
+      // If there are new players, add their names in column A
+      if (newPlayers.length > 0) {
+        const startRow = rows.length + 1;
+        const namesRange = `${firstSheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
+
+        await this.makeRequest(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(namesRange)}?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              range: namesRange,
+              majorDimension: 'ROWS',
+              values: newPlayers.map(p => [p.playerName]),
+            }),
+          }
+        );
+      }
+
+      console.log('Successfully updated in-progress session in spreadsheet');
+    } catch (error) {
+      console.error('Error updating in-progress session:', error);
+      throw error;
+    }
+  }
 }
 
 export const googleDriveService = new GoogleDriveService();

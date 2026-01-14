@@ -8,6 +8,7 @@ import {
   addBuyIn,
   setCashOut,
   completeSession,
+  resumeCompletedSession,
   addPlayer,
   setActiveSession,
   removePlayerFromSession,
@@ -19,9 +20,10 @@ import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
 
 const PlayPage: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { players } = useAppSelector(state => state.players);
   const { sessions, playerSessions, activeSessionId } = useAppSelector(state => state.sessions);
-  const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(state => state.ui);
+  const { importedSpreadsheetId, isGoogleConnected, settings } = useAppSelector(state => state.ui);
 
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showBuyInModal, setShowBuyInModal] = useState<string | null>(null);
@@ -67,7 +69,7 @@ const PlayPage: React.FC = () => {
   } = useForm<AddPlayerToSessionForm>({
     defaultValues: {
       playerId: '',
-      buyInAmount: 100,
+      buyInAmount: settings.defaultBuyIn,
     },
   });
 
@@ -79,7 +81,42 @@ const PlayPage: React.FC = () => {
     resetSession();
   };
 
-  const onAddPlayer = (data: AddPlayerToSessionForm) => {
+  // Helper function to update the spreadsheet with current session state
+  const updateSpreadsheetWithSession = async () => {
+    if (!activeSession || !importedSpreadsheetId || !isGoogleConnected) return;
+
+    try {
+      // Get current player buy-in data from store
+      const state = (window as any).__REDUX_STORE__?.getState?.();
+      if (!state) return;
+
+      const currentPlayerSessions = state.sessions.playerSessions.filter(
+        (ps: any) => ps.sessionId === activeSession.id
+      );
+      const allPlayers = state.players.players;
+
+      const playerBuyIns = currentPlayerSessions.map((ps: any) => {
+        const player = allPlayers.find((p: any) => p.id === ps.playerId);
+        const totalBuyIn = ps.buyIns.reduce((sum: number, b: any) => sum + b.amount, 0);
+        return {
+          playerName: player?.name || 'Unknown',
+          totalBuyIn: -totalBuyIn, // Negative because it's money in
+        };
+      });
+
+      await googleDriveService.updateInProgressSession(
+        importedSpreadsheetId,
+        new Date(activeSession.date),
+        playerBuyIns,
+        false // isComplete
+      );
+    } catch (error) {
+      console.error('Error updating spreadsheet:', error);
+      // Don't show alert for every update, just log it
+    }
+  };
+
+  const onAddPlayer = async (data: AddPlayerToSessionForm) => {
     if (!activeSessionId) return;
 
     let playerId = data.playerId;
@@ -93,7 +130,7 @@ const PlayPage: React.FC = () => {
 
       // Since we need the ID of the newly created player, we need to handle this differently
       // The player will be added on the next render, so we'll use a timeout
-      setTimeout(() => {
+      setTimeout(async () => {
         const state = (window as any).__REDUX_STORE__?.getState?.();
         if (state) {
           const newestPlayer = state.players.players[state.players.players.length - 1];
@@ -105,6 +142,8 @@ const PlayPage: React.FC = () => {
                 buyInAmount: data.buyInAmount,
               })
             );
+            // Update spreadsheet after a brief delay to allow state to update
+            setTimeout(() => updateSpreadsheetWithSession(), 100);
           }
         }
       }, 0);
@@ -116,6 +155,8 @@ const PlayPage: React.FC = () => {
           buyInAmount: data.buyInAmount,
         })
       );
+      // Update spreadsheet
+      setTimeout(() => updateSpreadsheetWithSession(), 100);
     }
 
     dispatch(markUnsyncedChanges());
@@ -123,11 +164,13 @@ const PlayPage: React.FC = () => {
     setShowAddPlayer(false);
   };
 
-  const handleAddBuyIn = (playerSessionId: string) => {
+  const handleAddBuyIn = async (playerSessionId: string) => {
     const amount = parseFloat(buyInAmount);
     if (!isNaN(amount) && amount > 0) {
       dispatch(addBuyIn({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
+      // Update spreadsheet
+      setTimeout(() => updateSpreadsheetWithSession(), 100);
     }
     setBuyInAmount('');
     setShowBuyInModal(null);
@@ -198,7 +241,8 @@ const PlayPage: React.FC = () => {
     dispatch(completeSession(activeSessionId));
     dispatch(markUnsyncedChanges());
 
-    alert('Session completed and saved!');
+    // Navigate to results page
+    navigate('/');
   };
 
   const getPlayerName = (playerId: string) => {
@@ -230,30 +274,15 @@ const PlayPage: React.FC = () => {
     });
   }, [availablePlayers, playerGameCounts]);
 
-  // Calculate most common buy-in amount
-  const mostCommonBuyIn = useMemo(() => {
-    const buyInCounts = new Map<number, number>();
-    playerSessions.forEach(ps => {
-      ps.buyIns.forEach(buyIn => {
-        const count = buyInCounts.get(buyIn.amount) || 0;
-        buyInCounts.set(buyIn.amount, count + 1);
-      });
-    });
-
-    let maxCount = 0;
-    let mostCommon = 100; // Default
-    buyInCounts.forEach((count, amount) => {
-      if (count > maxCount) {
-        maxCount = count;
-        mostCommon = amount;
-      }
-    });
-    return mostCommon;
-  }, [playerSessions]);
-
   // If no active session, show session creation or list of incomplete sessions
   if (!activeSession) {
     const incompleteSessions = sessions.filter(s => !s.isComplete && !s.isImported);
+
+    // Find the most recent completed non-imported session (for "resume accidentally ended" feature)
+    const recentlyCompletedSessions = sessions
+      .filter(s => s.isComplete && !s.isImported)
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    const lastCompletedSession = recentlyCompletedSessions[0];
 
     // Check if user can start a session (must have Google connected and sheet linked)
     const canStartSession = isGoogleConnected && importedSpreadsheetId;
@@ -279,35 +308,49 @@ const PlayPage: React.FC = () => {
         <div className={`card-nb ${!canStartSession ? 'opacity-50 pointer-events-none' : ''}`}>
           <h2 className="mb-6">Start New Session</h2>
           <form onSubmit={handleSessionSubmit(onCreateSession)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Session Name (optional)</label>
-                <input
-                  {...registerSession('name')}
-                  className="input-nb"
-                  placeholder="e.g., Friday Night Game"
-                />
-              </div>
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Date</label>
                 <input type="date" {...registerSession('date')} className="input-nb" required />
               </div>
-              <div>
-                <label className="block text-sm font-semibold mb-1">Stakes (optional)</label>
-                <input
-                  {...registerSession('stakes')}
-                  className="input-nb"
-                  placeholder="e.g., $1/$2"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold mb-1">Location (optional)</label>
-                <input
-                  {...registerSession('location')}
-                  className="input-nb"
-                  placeholder="e.g., John's House"
-                />
-              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOptionalFields(!showOptionalFields)}
+                className="flex items-center gap-2 text-sm font-semibold text-theme-secondary hover:text-theme transition-colors"
+              >
+                <span className={`transform transition-transform ${showOptionalFields ? 'rotate-90' : ''}`}>▶</span>
+                Optional Details
+              </button>
+
+              {showOptionalFields && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4 border-l-3" style={{ borderColor: 'var(--color-border)' }}>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Session Name</label>
+                    <input
+                      {...registerSession('name')}
+                      className="input-nb"
+                      placeholder="e.g., Friday Night Game"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Stakes</label>
+                    <input
+                      {...registerSession('stakes')}
+                      className="input-nb"
+                      placeholder="e.g., $1/$2"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold mb-1">Location</label>
+                    <input
+                      {...registerSession('location')}
+                      className="input-nb"
+                      placeholder="e.g., John's House"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <button type="submit" className="btn-nb-primary" disabled={!canStartSession}>
               Start Session
@@ -341,6 +384,30 @@ const PlayPage: React.FC = () => {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Resume accidentally ended game */}
+        {lastCompletedSession && canStartSession && (
+          <div className="card-nb bg-nb-orange bg-opacity-20">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-nb-black dark:text-theme">Accidentally ended a game?</h3>
+                <p className="text-sm text-theme-secondary">
+                  Resume "{lastCompletedSession.name || new Date(lastCompletedSession.date).toLocaleDateString()}"
+                  (ended {new Date(lastCompletedSession.updatedAt).toLocaleString()})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  dispatch(resumeCompletedSession(lastCompletedSession.id));
+                  dispatch(markUnsyncedChanges());
+                }}
+                className="btn-nb bg-nb-orange text-nb-black whitespace-nowrap"
+              >
+                Resume Game
+              </button>
             </div>
           </div>
         )}
@@ -384,25 +451,25 @@ const PlayPage: React.FC = () => {
       </div>
 
       {/* Table Total */}
-      <div className="card-nb bg-nb-yellow">
+      <div className="card-nb bg-nb-yellow text-nb-black">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-sm font-semibold">Total on Table</div>
-            <div className="text-3xl font-bold">{formatMoney(tableTotal)}</div>
+            <div className="text-sm font-semibold text-nb-black">Total on Table</div>
+            <div className="text-3xl font-bold text-nb-black">{formatMoney(tableTotal)}</div>
           </div>
           {cashOutTotal > 0 && (
             <div className="text-right">
-              <div className="text-sm font-semibold">Cashed Out</div>
-              <div className="text-2xl font-bold">{formatMoney(cashOutTotal)}</div>
+              <div className="text-sm font-semibold text-nb-black">Cashed Out</div>
+              <div className="text-2xl font-bold text-nb-black">{formatMoney(cashOutTotal)}</div>
             </div>
           )}
           <button
             onClick={() => {
-              setPlayerValue('buyInAmount', mostCommonBuyIn);
+              setPlayerValue('buyInAmount', settings.defaultBuyIn);
               setShowAddPlayer(true);
             }}
-            className="btn-nb"
-            style={{ backgroundColor: 'var(--color-bg-card)' }}
+            className="btn-nb text-nb-black"
+            style={{ backgroundColor: '#FFFFFF' }}
           >
             + Add Player
           </button>
@@ -444,7 +511,7 @@ const PlayPage: React.FC = () => {
                         ))}
                         <button
                           onClick={() => {
-                            setBuyInAmount(mostCommonBuyIn.toString());
+                            setBuyInAmount(settings.defaultBuyIn.toString());
                             setShowBuyInModal(ps.id);
                           }}
                           className="w-6 h-6 flex items-center justify-center border-2 text-xs font-bold hover:bg-nb-yellow"
@@ -459,7 +526,16 @@ const PlayPage: React.FC = () => {
                     </td>
                     <td>
                       {ps.cashOut !== undefined ? (
-                        <span className="font-semibold">{formatMoney(ps.cashOut)}</span>
+                        <button
+                          onClick={() => {
+                            setCashOutAmount(ps.cashOut!.toString());
+                            setShowCashOutModal(ps.id);
+                          }}
+                          className="font-semibold hover:text-nb-blue hover:underline cursor-pointer"
+                          title="Click to edit"
+                        >
+                          {formatMoney(ps.cashOut)}
+                        </button>
                       ) : (
                         <button
                           onClick={() => setShowCashOutModal(ps.id)}
@@ -614,43 +690,52 @@ const PlayPage: React.FC = () => {
       )}
 
       {/* Cash-out Modal */}
-      {showCashOutModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="card-nb w-full max-w-sm mx-4">
-            <h3 className="mb-4">Cash Out</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={cashOutAmount}
-                  onChange={e => setCashOutAmount(e.target.value)}
-                  className="input-nb"
-                  autoFocus
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleCashOut(showCashOutModal)}
-                  className="btn-nb-success"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCashOutModal(null);
-                    setCashOutAmount('');
-                  }}
-                  className="btn-nb"
-                >
-                  Cancel
-                </button>
+      {showCashOutModal && (() => {
+        const currentPlayerSession = activePlayerSessions.find(ps => ps.id === showCashOutModal);
+        const isEditing = currentPlayerSession?.cashOut !== undefined;
+        const playerName = getPlayerName(currentPlayerSession?.playerId || '');
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="card-nb w-full max-w-sm mx-4">
+              <h3 className="mb-4">{isEditing ? 'Edit Cash Out' : 'Cash Out'}</h3>
+              {playerName && (
+                <p className="text-sm text-theme-secondary mb-4">Player: {playerName}</p>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={cashOutAmount}
+                    onChange={e => setCashOutAmount(e.target.value)}
+                    className="input-nb"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleCashOut(showCashOutModal)}
+                    className="btn-nb-success"
+                  >
+                    {isEditing ? 'Update' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCashOutModal(null);
+                      setCashOutAmount('');
+                    }}
+                    className="btn-nb"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
