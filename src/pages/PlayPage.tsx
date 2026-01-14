@@ -13,10 +13,27 @@ import {
   setActiveSession,
   removePlayerFromSession,
   markUnsyncedChanges,
+  setPlayers,
+  replaceImportedSessions,
+  clearUnsyncedChanges,
+  setSyncStatus,
 } from '../store';
 import { formatMoney, formatMoneyWithSign, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
+import { parseSpreadsheetData } from '../utils/csvImport';
 import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
+
+// Helper to save session data to localStorage for resume feature
+const SAVED_SESSION_KEY = 'poker_tracker_saved_session';
+
+interface SavedSessionData {
+  sessionId: string;
+  playerSessions: Array<{
+    playerId: string;
+    buyIns: Array<{ id: string; amount: number; timestamp: string }>;
+    cashOut?: number;
+  }>;
+}
 
 const PlayPage: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -81,42 +98,7 @@ const PlayPage: React.FC = () => {
     resetSession();
   };
 
-  // Helper function to update the spreadsheet with current session state
-  const updateSpreadsheetWithSession = async () => {
-    if (!activeSession || !importedSpreadsheetId || !isGoogleConnected) return;
-
-    try {
-      // Get current player buy-in data from store
-      const state = (window as any).__REDUX_STORE__?.getState?.();
-      if (!state) return;
-
-      const currentPlayerSessions = state.sessions.playerSessions.filter(
-        (ps: any) => ps.sessionId === activeSession.id
-      );
-      const allPlayers = state.players.players;
-
-      const playerBuyIns = currentPlayerSessions.map((ps: any) => {
-        const player = allPlayers.find((p: any) => p.id === ps.playerId);
-        const totalBuyIn = ps.buyIns.reduce((sum: number, b: any) => sum + b.amount, 0);
-        return {
-          playerName: player?.name || 'Unknown',
-          totalBuyIn: -totalBuyIn, // Negative because it's money in
-        };
-      });
-
-      await googleDriveService.updateInProgressSession(
-        importedSpreadsheetId,
-        new Date(activeSession.date),
-        playerBuyIns,
-        false // isComplete
-      );
-    } catch (error) {
-      console.error('Error updating spreadsheet:', error);
-      // Don't show alert for every update, just log it
-    }
-  };
-
-  const onAddPlayer = async (data: AddPlayerToSessionForm) => {
+  const onAddPlayer = (data: AddPlayerToSessionForm) => {
     if (!activeSessionId) return;
 
     let playerId = data.playerId;
@@ -130,7 +112,7 @@ const PlayPage: React.FC = () => {
 
       // Since we need the ID of the newly created player, we need to handle this differently
       // The player will be added on the next render, so we'll use a timeout
-      setTimeout(async () => {
+      setTimeout(() => {
         const state = (window as any).__REDUX_STORE__?.getState?.();
         if (state) {
           const newestPlayer = state.players.players[state.players.players.length - 1];
@@ -142,8 +124,6 @@ const PlayPage: React.FC = () => {
                 buyInAmount: data.buyInAmount,
               })
             );
-            // Update spreadsheet after a brief delay to allow state to update
-            setTimeout(() => updateSpreadsheetWithSession(), 100);
           }
         }
       }, 0);
@@ -155,8 +135,6 @@ const PlayPage: React.FC = () => {
           buyInAmount: data.buyInAmount,
         })
       );
-      // Update spreadsheet
-      setTimeout(() => updateSpreadsheetWithSession(), 100);
     }
 
     dispatch(markUnsyncedChanges());
@@ -164,13 +142,11 @@ const PlayPage: React.FC = () => {
     setShowAddPlayer(false);
   };
 
-  const handleAddBuyIn = async (playerSessionId: string) => {
+  const handleAddBuyIn = (playerSessionId: string) => {
     const amount = parseFloat(buyInAmount);
     if (!isNaN(amount) && amount > 0) {
       dispatch(addBuyIn({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
-      // Update spreadsheet
-      setTimeout(() => updateSpreadsheetWithSession(), 100);
     }
     setBuyInAmount('');
     setShowBuyInModal(null);
@@ -205,6 +181,17 @@ const PlayPage: React.FC = () => {
       if (!proceed) return;
     }
 
+    // Save session data to localStorage for potential resume
+    const savedData: SavedSessionData = {
+      sessionId: activeSessionId,
+      playerSessions: activePlayerSessions.map(ps => ({
+        playerId: ps.playerId,
+        buyIns: ps.buyIns,
+        cashOut: ps.cashOut,
+      })),
+    };
+    localStorage.setItem(SAVED_SESSION_KEY, JSON.stringify(savedData));
+
     // Save to Google Sheet (required for all sessions)
     if (isGoogleConnected && importedSpreadsheetId) {
       try {
@@ -230,16 +217,40 @@ const PlayPage: React.FC = () => {
         );
 
         console.log('Session saved to Google Sheet successfully');
+
+        // Sync from spreadsheet to ensure local state matches
+        try {
+          const spreadsheetData = await googleDriveService.getSpreadsheetData(importedSpreadsheetId);
+          const result = parseSpreadsheetData(spreadsheetData);
+
+          dispatch(setPlayers(result.players));
+          dispatch(replaceImportedSessions({
+            sessions: result.sessions,
+            playerSessions: result.playerSessions,
+          }));
+
+          dispatch(clearUnsyncedChanges());
+          dispatch(setSyncStatus({
+            lastSyncTime: new Date().toISOString(),
+            hasUnsyncedChanges: false,
+            error: null,
+          }));
+        } catch (syncError) {
+          console.error('Error syncing after save:', syncError);
+          // Don't block navigation if sync fails
+        }
       } catch (error) {
         console.error('Error saving to Google Sheet:', error);
         alert(`Failed to save to Google Sheet: ${error}. The session will still be saved locally.`);
+        dispatch(completeSession(activeSessionId));
+        dispatch(markUnsyncedChanges());
       } finally {
         setIsSavingToSheet(false);
       }
+    } else {
+      dispatch(completeSession(activeSessionId));
+      dispatch(markUnsyncedChanges());
     }
-
-    dispatch(completeSession(activeSessionId));
-    dispatch(markUnsyncedChanges());
 
     // Navigate to results page
     navigate('/');
@@ -401,8 +412,43 @@ const PlayPage: React.FC = () => {
               </div>
               <button
                 onClick={() => {
+                  // First resume the session (this resets cashouts to undefined)
                   dispatch(resumeCompletedSession(lastCompletedSession.id));
                   dispatch(markUnsyncedChanges());
+
+                  // Restore saved cash-out amounts from localStorage if available
+                  try {
+                    const savedJson = localStorage.getItem(SAVED_SESSION_KEY);
+                    if (savedJson) {
+                      const savedData: SavedSessionData = JSON.parse(savedJson);
+                      if (savedData.sessionId === lastCompletedSession.id) {
+                        // Get the current state to find playerSession IDs
+                        const state = (window as any).__REDUX_STORE__?.getState?.();
+                        if (state) {
+                          const currentPlayerSessions = state.sessions.playerSessions.filter(
+                            (ps: any) => ps.sessionId === lastCompletedSession.id
+                          );
+
+                          // Restore cash-out amounts for each player
+                          savedData.playerSessions.forEach(saved => {
+                            if (saved.cashOut !== undefined) {
+                              const matchingPs = currentPlayerSessions.find(
+                                (ps: any) => ps.playerId === saved.playerId
+                              );
+                              if (matchingPs) {
+                                dispatch(setCashOut({
+                                  playerSessionId: matchingPs.id,
+                                  amount: saved.cashOut,
+                                }));
+                              }
+                            }
+                          });
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Error restoring session data:', e);
+                  }
                 }}
                 className="btn-nb bg-nb-orange text-nb-black whitespace-nowrap"
               >
@@ -458,9 +504,21 @@ const PlayPage: React.FC = () => {
             <div className="text-3xl font-bold text-nb-black">{formatMoney(tableTotal)}</div>
           </div>
           {cashOutTotal > 0 && (
-            <div className="text-right">
+            <div className="text-center">
               <div className="text-sm font-semibold text-nb-black">Cashed Out</div>
               <div className="text-2xl font-bold text-nb-black">{formatMoney(cashOutTotal)}</div>
+            </div>
+          )}
+          {cashOutTotal > 0 && (
+            <div className="text-right">
+              <div className="text-sm font-semibold text-nb-black">Difference</div>
+              <div className={`text-2xl font-bold ${
+                cashOutTotal - tableTotal === 0
+                  ? 'text-nb-green'
+                  : 'text-nb-red'
+              }`}>
+                {formatMoneyWithSign(cashOutTotal - tableTotal)}
+              </div>
             </div>
           )}
           <button

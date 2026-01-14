@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
-import { toggleImportModal, setPlayers, replaceImportedSessions, markUnsyncedChanges } from '../store';
+import { toggleImportModal, setPlayers, replaceImportedSessions, clearUnsyncedChanges, setSyncStatus } from '../store';
 import GoogleAuthButton from './GoogleAuthButton';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import ThemeToggle from './ThemeToggle';
@@ -35,7 +35,14 @@ const Layout: React.FC = () => {
         sessions: result.sessions,
         playerSessions: result.playerSessions,
       }));
-      dispatch(markUnsyncedChanges());
+
+      // Mark as synced
+      dispatch(clearUnsyncedChanges());
+      dispatch(setSyncStatus({
+        lastSyncTime: new Date().toISOString(),
+        hasUnsyncedChanges: false,
+        error: null,
+      }));
     } catch (error) {
       console.error('Error syncing from spreadsheet:', error);
       alert(`Failed to sync from Google Sheet: ${error}`);

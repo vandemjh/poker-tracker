@@ -69,13 +69,49 @@ const ResultsPage: React.FC = () => {
   }, [statistics, selectedPlayers]);
 
   // Limit chart data to last 20 games unless showAllGames is true
+  // Also adjust balances to start at zero from the first shown date
   const limitedChartData = useMemo(() => {
-    if (showAllGames) return chartData;
+    // Get all unique dates across all players and sort them
+    const allDates = new Set<string>();
+    chartData.forEach(player => {
+      player.balanceHistory.forEach(entry => {
+        allDates.add(entry.date);
+      });
+    });
+    const sortedDates = Array.from(allDates).sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    );
 
-    return chartData.map(player => ({
-      ...player,
-      balanceHistory: player.balanceHistory.slice(-20),
-    }));
+    // Determine which dates to show
+    const datesToShow = showAllGames
+      ? new Set(sortedDates)
+      : new Set(sortedDates.slice(-20));
+
+    // Filter and adjust each player's balance history
+    return chartData.map(player => {
+      // Filter to only included dates
+      const filteredHistory = player.balanceHistory.filter(entry => datesToShow.has(entry.date));
+
+      if (filteredHistory.length === 0) {
+        return { ...player, balanceHistory: [] };
+      }
+
+      // Calculate the offset: balance just before the first shown entry
+      // We want to subtract the accumulated balance up to (but not including) the first shown game
+      const firstShownDate = filteredHistory[0].date;
+      const firstEntryIndex = player.balanceHistory.findIndex(entry => entry.date === firstShownDate);
+      const offsetBalance = firstEntryIndex > 0
+        ? player.balanceHistory[firstEntryIndex - 1].balance
+        : 0;
+
+      // Adjust all balances to start from zero
+      const adjustedHistory = filteredHistory.map(entry => ({
+        ...entry,
+        balance: entry.balance - offsetBalance,
+      }));
+
+      return { ...player, balanceHistory: adjustedHistory };
+    });
   }, [chartData, showAllGames]);
 
   // Count total games in the data
@@ -88,6 +124,41 @@ const ResultsPage: React.FC = () => {
     });
     return allDates.size;
   }, [chartData]);
+
+  // Recent games data for the Recent Games component
+  const recentGamesData = useMemo(() => {
+    // Get completed sessions sorted by date (most recent first)
+    const recentSessions = [...sessions]
+      .filter(s => s.isComplete)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20);
+
+    return recentSessions.map(session => {
+      // Get player results for this session
+      const sessionPlayerSessions = playerSessions.filter(
+        ps => ps.sessionId === session.id
+      );
+      const results = sessionPlayerSessions
+        .map(ps => {
+          const player = players.find(p => p.id === ps.playerId);
+          return {
+            name: player?.name || 'Unknown',
+            netResult: ps.netResult,
+          };
+        })
+        .sort((a, b) => b.netResult - a.netResult);
+
+      const winners = results.filter(r => r.netResult > 0);
+      const losers = results.filter(r => r.netResult < 0);
+
+      return {
+        session,
+        results,
+        winners,
+        losers,
+      };
+    });
+  }, [sessions, playerSessions, players]);
 
   const getSortIcon = (column: string) => {
     if (sortColumn !== column) return '↕';
@@ -273,6 +344,81 @@ const ResultsPage: React.FC = () => {
                 ? `Show last 20 games`
                 : `Show all ${totalGames} games`}
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Recent Games */}
+      <div className="card-nb">
+        <h2 className="mb-4">Recent Games</h2>
+        {recentGamesData.length === 0 ? (
+          <p className="text-theme-secondary text-center py-4">
+            No completed games yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {recentGamesData.map(({ session, results, winners, losers }) => (
+              <div
+                key={session.id}
+                className="p-3 border-2 transition-colors"
+                style={{
+                  borderColor: 'var(--color-border)',
+                  backgroundColor: 'var(--color-bg)',
+                }}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">
+                      {new Date(session.date).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </div>
+                    <div className="text-sm text-theme-secondary">
+                      {results.length} players
+                      {session.stakes && ` • ${session.stakes}`}
+                      {session.location && ` • ${session.location}`}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    {winners.length > 0 && (
+                      <div>
+                        <span className="text-theme-secondary">Winners: </span>
+                        {winners.slice(0, 3).map((w, i) => (
+                          <span key={w.name + i}>
+                            {i > 0 && ', '}
+                            <span className="status-positive font-semibold">
+                              {w.name} ({formatMoneyWithSign(w.netResult)})
+                            </span>
+                          </span>
+                        ))}
+                        {winners.length > 3 && (
+                          <span className="text-theme-secondary"> +{winners.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
+                    {losers.length > 0 && (
+                      <div>
+                        <span className="text-theme-secondary">Losers: </span>
+                        {losers.slice(0, 3).map((l, i) => (
+                          <span key={l.name + i}>
+                            {i > 0 && ', '}
+                            <span className="status-negative font-semibold">
+                              {l.name} ({formatMoneyWithSign(l.netResult)})
+                            </span>
+                          </span>
+                        ))}
+                        {losers.length > 3 && (
+                          <span className="text-theme-secondary"> +{losers.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

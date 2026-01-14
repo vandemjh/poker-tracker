@@ -8,20 +8,42 @@ import {
   setLoading,
   setError,
   setPlayers,
-  setSessions,
-  setPlayerSessions,
+  replaceImportedSessions,
   setImportedSpreadsheetId,
   setInitializing,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
+import { parseSpreadsheetData } from '../utils/csvImport';
 
 const GoogleAuthButton: React.FC = () => {
   const dispatch = useAppDispatch();
   const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(state => state.ui);
-  const { players } = useAppSelector(state => state.players);
-  const { sessions } = useAppSelector(state => state.sessions);
 
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // Helper function to sync from spreadsheet
+  const syncFromSpreadsheet = async (spreadsheetId: string) => {
+    try {
+      const spreadsheetData = await googleDriveService.getSpreadsheetData(spreadsheetId);
+      const result = parseSpreadsheetData(spreadsheetData);
+
+      // Replace all data with spreadsheet data
+      dispatch(setPlayers(result.players));
+      dispatch(replaceImportedSessions({
+        sessions: result.sessions,
+        playerSessions: result.playerSessions,
+      }));
+
+      dispatch(setSyncStatus({
+        lastSyncTime: new Date().toISOString(),
+        hasUnsyncedChanges: false,
+        error: null,
+      }));
+    } catch (error) {
+      console.error('Error syncing from spreadsheet:', error);
+      // Don't throw - just log the error, user can manually sync later
+    }
+  };
 
   // Try to restore session on mount
   useEffect(() => {
@@ -40,31 +62,13 @@ const GoogleAuthButton: React.FC = () => {
           dispatch(setGoogleConnected(true));
           dispatch(setGoogleUser(storedUser));
 
-          // Restore spreadsheet ID
+          // Restore spreadsheet ID and auto-sync from it
           const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
           if (spreadsheetId) {
             dispatch(setImportedSpreadsheetId(spreadsheetId));
+            // Auto-sync from spreadsheet - spreadsheet is the source of truth
+            await syncFromSpreadsheet(spreadsheetId);
           }
-
-          // Load data from Google Drive if no local data
-          if (players.length === 0 && sessions.length === 0) {
-            try {
-              const appData = await googleDriveService.loadAppData();
-              if (appData.players.length > 0 || appData.sessions.length > 0) {
-                dispatch(setPlayers(appData.players));
-                dispatch(setSessions(appData.sessions));
-                dispatch(setPlayerSessions(appData.playerSessions));
-              }
-            } catch (error) {
-              console.error('Error loading data on restore:', error);
-            }
-          }
-
-          dispatch(setSyncStatus({
-            lastSyncTime: new Date().toISOString(),
-            hasUnsyncedChanges: false,
-            error: null,
-          }));
         } else {
           // Token expired, clear it
           googleDriveService.clearAccessToken();
@@ -88,23 +92,12 @@ const GoogleAuthButton: React.FC = () => {
         const userInfo = await googleDriveService.fetchUserInfo();
         dispatch(setGoogleUser(userInfo));
 
-        // Load existing data from Google Drive
-        const appData = await googleDriveService.loadAppData();
-
-        if (appData.players.length > 0 || appData.sessions.length > 0) {
-          // If there's existing data in Drive and no local data, load it
-          if (players.length === 0 && sessions.length === 0) {
-            dispatch(setPlayers(appData.players));
-            dispatch(setSessions(appData.sessions));
-            dispatch(setPlayerSessions(appData.playerSessions));
-          }
+        // Check if there's a linked spreadsheet and auto-sync from it
+        const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
+        if (spreadsheetId) {
+          dispatch(setImportedSpreadsheetId(spreadsheetId));
+          await syncFromSpreadsheet(spreadsheetId);
         }
-
-        dispatch(setSyncStatus({
-          lastSyncTime: new Date().toISOString(),
-          hasUnsyncedChanges: false,
-          error: null,
-        }));
       } catch (error) {
         console.error('Error connecting to Google Drive:', error);
         dispatch(setError('Failed to connect to Google Drive'));
