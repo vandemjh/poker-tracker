@@ -7,6 +7,18 @@
 
 @layer base {
   :root {
+    /* Light mode colors */
+    --color-bg: #FFF8E7;
+    --color-bg-card: #FFFFFF;
+    --color-text: #000000;
+    --color-text-secondary: #4B5563;
+    --color-border: #000000;
+    --color-shadow: #000000;
+    --color-input-bg: #FFFFFF;
+    --color-table-header-bg: #000000;
+    --color-table-header-text: #FFFFFF;
+    --color-placeholder: #9CA3AF;
+
     font-family: 'Inter', system-ui, sans-serif;
     line-height: 1.5;
     font-weight: 400;
@@ -16,8 +28,24 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .dark {
+    /* Dark mode colors */
+    --color-bg: #0f172a;
+    --color-bg-card: #1e293b;
+    --color-text: #f8fafc;
+    --color-text-secondary: #94a3b8;
+    --color-border: #475569;
+    --color-shadow: rgba(255, 255, 255, 0.1);
+    --color-input-bg: #1e293b;
+    --color-table-header-bg: #334155;
+    --color-table-header-text: #f8fafc;
+    --color-placeholder: #64748b;
+  }
+
   body {
-    @apply bg-nb-cream text-nb-black min-h-screen;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    @apply min-h-screen transition-colors duration-200;
     margin: 0;
   }
 
@@ -42,14 +70,24 @@
 @layer components {
   /* Neo-brutalist button */
   .btn-nb {
-    @apply px-6 py-3 font-semibold border-3 border-nb-black bg-nb-white shadow-nb;
-    @apply transition-all duration-100 ease-in-out;
-    @apply hover:shadow-nb-hover hover:translate-x-[2px] hover:translate-y-[2px];
-    @apply active:shadow-nb-active active:translate-x-[4px] active:translate-y-[4px];
+    @apply px-6 py-3 font-semibold border-3 transition-all duration-100 ease-in-out;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border);
+    box-shadow: 4px 4px 0px 0px var(--color-shadow);
+    @apply hover:translate-x-[2px] hover:translate-y-[2px];
+    @apply active:translate-x-[4px] active:translate-y-[4px];
+  }
+
+  .btn-nb:hover {
+    box-shadow: 2px 2px 0px 0px var(--color-shadow);
+  }
+
+  .btn-nb:active {
+    box-shadow: 0px 0px 0px 0px var(--color-shadow);
   }
 
   .btn-nb-primary {
-    @apply btn-nb bg-nb-yellow;
+    @apply btn-nb bg-nb-yellow text-nb-black;
   }
 
   .btn-nb-secondary {
@@ -57,7 +95,7 @@
   }
 
   .btn-nb-success {
-    @apply btn-nb bg-nb-green;
+    @apply btn-nb bg-nb-green text-nb-black;
   }
 
   .btn-nb-danger {
@@ -65,28 +103,45 @@
   }
 
   .btn-nb-disabled {
-    @apply btn-nb bg-gray-300 cursor-not-allowed;
-    @apply hover:shadow-nb hover:translate-x-0 hover:translate-y-0;
+    @apply btn-nb cursor-not-allowed;
+    @apply hover:translate-x-0 hover:translate-y-0;
+    background-color: #d1d5db;
+  }
+
+  .dark .btn-nb-disabled {
+    background-color: #374151;
   }
 
   /* Neo-brutalist card */
   .card-nb {
-    @apply bg-nb-white border-3 border-nb-black shadow-nb p-4 md:p-6;
+    @apply border-3 p-4 md:p-6 transition-colors duration-200;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border);
+    box-shadow: 4px 4px 0px 0px var(--color-shadow);
   }
 
   /* Neo-brutalist input */
   .input-nb {
-    @apply w-full px-4 py-3 border-3 border-nb-black bg-nb-white;
+    @apply w-full px-4 py-3 border-3 transition-colors duration-200;
     @apply focus:outline-none focus:ring-2 focus:ring-nb-yellow;
-    @apply placeholder:text-gray-400;
+    background-color: var(--color-input-bg);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .input-nb::placeholder {
+    color: var(--color-placeholder);
   }
 
   /* Neo-brutalist select */
   .select-nb {
-    @apply w-full px-4 py-3 border-3 border-nb-black bg-nb-white;
+    @apply w-full px-4 py-3 border-3 transition-colors duration-200;
     @apply focus:outline-none focus:ring-2 focus:ring-nb-yellow;
     @apply appearance-none cursor-pointer;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-color: var(--color-input-bg);
+    border-color: var(--color-border);
+    color: var(--color-text);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23666' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
     background-position: right 0.75rem center;
     background-repeat: no-repeat;
     background-size: 1.5em 1.5em;
@@ -94,24 +149,35 @@
 
   /* Neo-brutalist badge */
   .badge-nb {
-    @apply inline-flex items-center px-3 py-1 text-sm font-semibold border-2 border-nb-black;
+    @apply inline-flex items-center px-3 py-1 text-sm font-semibold border-2;
+    border-color: var(--color-border);
   }
 
   /* Neo-brutalist table */
   .table-nb {
-    @apply w-full border-collapse border-3 border-nb-black;
+    @apply w-full border-collapse border-3;
+    border-color: var(--color-border);
   }
 
   .table-nb th {
-    @apply bg-nb-black text-nb-white px-4 py-3 text-left font-semibold border-b-3 border-nb-black;
+    @apply px-4 py-3 text-left font-semibold border-b-3;
+    background-color: var(--color-table-header-bg);
+    color: var(--color-table-header-text);
+    border-color: var(--color-border);
   }
 
   .table-nb td {
-    @apply px-4 py-3 border-b-2 border-nb-black bg-nb-white;
+    @apply px-4 py-3 border-b-2 transition-colors duration-200;
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border);
   }
 
   .table-nb tr:hover td {
     @apply bg-nb-yellow bg-opacity-20;
+  }
+
+  .dark .table-nb tr:hover td {
+    @apply bg-nb-yellow bg-opacity-10;
   }
 
   /* Status indicators */
@@ -124,7 +190,23 @@
   }
 
   .status-neutral {
-    @apply text-nb-black;
+    color: var(--color-text);
+  }
+
+  /* Header in dark mode */
+  .dark .header-nb {
+    background-color: var(--color-bg-card);
+    border-color: var(--color-border);
+  }
+
+  /* Modal backdrop */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+
+  .dark .modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.7);
   }
 }
 
@@ -136,5 +218,26 @@
 
   .money-negative::before {
     content: '-$';
+  }
+
+  /* Text colors that respect theme */
+  .text-theme {
+    color: var(--color-text);
+  }
+
+  .text-theme-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .bg-theme {
+    background-color: var(--color-bg);
+  }
+
+  .bg-theme-card {
+    background-color: var(--color-bg-card);
+  }
+
+  .border-theme {
+    border-color: var(--color-border);
   }
 }

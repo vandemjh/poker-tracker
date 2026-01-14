@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
 import {
   createSession,
@@ -13,18 +14,22 @@ import {
   markUnsyncedChanges,
 } from '../store';
 import { formatMoney, formatMoneyWithSign, validateZeroSum } from '../utils/statistics';
+import { googleDriveService } from '../services/googleDrive';
 import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
 
 const PlayPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { players } = useAppSelector(state => state.players);
   const { sessions, playerSessions, activeSessionId } = useAppSelector(state => state.sessions);
+  const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(state => state.ui);
 
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showBuyInModal, setShowBuyInModal] = useState<string | null>(null);
   const [showCashOutModal, setShowCashOutModal] = useState<string | null>(null);
   const [buyInAmount, setBuyInAmount] = useState('');
   const [cashOutAmount, setCashOutAmount] = useState('');
+  const [isSavingToSheet, setIsSavingToSheet] = useState(false);
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
 
   const activeSession = useMemo(() => {
     return sessions.find(s => s.id === activeSessionId);
@@ -58,6 +63,7 @@ const PlayPage: React.FC = () => {
     handleSubmit: handlePlayerSubmit,
     reset: resetPlayer,
     watch: watchPlayer,
+    setValue: setPlayerValue,
   } = useForm<AddPlayerToSessionForm>({
     defaultValues: {
       playerId: '',
@@ -137,8 +143,8 @@ const PlayPage: React.FC = () => {
     setShowCashOutModal(null);
   };
 
-  const handleEndSession = () => {
-    if (!activeSessionId) return;
+  const handleEndSession = async () => {
+    if (!activeSessionId || !activeSession) return;
 
     // Check if all players have cashed out
     const allCashedOut = activePlayerSessions.every(ps => ps.cashOut !== undefined);
@@ -156,8 +162,43 @@ const PlayPage: React.FC = () => {
       if (!proceed) return;
     }
 
+    // Save to Google Sheet (required for all sessions)
+    if (isGoogleConnected && importedSpreadsheetId) {
+      try {
+        setIsSavingToSheet(true);
+
+        // Build player results for the spreadsheet
+        const playerResults = activePlayerSessions.map(ps => {
+          const player = players.find(p => p.id === ps.playerId);
+          return {
+            playerName: player?.name || 'Unknown',
+            netResult: ps.netResult,
+          };
+        });
+
+        // Get session date
+        const sessionDate = new Date(activeSession.date);
+
+        // Append to the Google Sheet
+        await googleDriveService.appendSessionColumn(
+          importedSpreadsheetId,
+          sessionDate,
+          playerResults
+        );
+
+        console.log('Session saved to Google Sheet successfully');
+      } catch (error) {
+        console.error('Error saving to Google Sheet:', error);
+        alert(`Failed to save to Google Sheet: ${error}. The session will still be saved locally.`);
+      } finally {
+        setIsSavingToSheet(false);
+      }
+    }
+
     dispatch(completeSession(activeSessionId));
     dispatch(markUnsyncedChanges());
+
+    alert('Session completed and saved!');
   };
 
   const getPlayerName = (playerId: string) => {
@@ -170,13 +211,72 @@ const PlayPage: React.FC = () => {
     return players.filter(p => !usedPlayerIds.has(p.id));
   }, [players, activePlayerSessions]);
 
+  // Calculate games played per player for sorting
+  const playerGameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    players.forEach(player => {
+      const gameCount = playerSessions.filter(ps => ps.playerId === player.id).length;
+      counts.set(player.id, gameCount);
+    });
+    return counts;
+  }, [players, playerSessions]);
+
+  // Sort available players by games played (descending)
+  const sortedAvailablePlayers = useMemo(() => {
+    return [...availablePlayers].sort((a, b) => {
+      const countA = playerGameCounts.get(a.id) || 0;
+      const countB = playerGameCounts.get(b.id) || 0;
+      return countB - countA;
+    });
+  }, [availablePlayers, playerGameCounts]);
+
+  // Calculate most common buy-in amount
+  const mostCommonBuyIn = useMemo(() => {
+    const buyInCounts = new Map<number, number>();
+    playerSessions.forEach(ps => {
+      ps.buyIns.forEach(buyIn => {
+        const count = buyInCounts.get(buyIn.amount) || 0;
+        buyInCounts.set(buyIn.amount, count + 1);
+      });
+    });
+
+    let maxCount = 0;
+    let mostCommon = 100; // Default
+    buyInCounts.forEach((count, amount) => {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = amount;
+      }
+    });
+    return mostCommon;
+  }, [playerSessions]);
+
   // If no active session, show session creation or list of incomplete sessions
   if (!activeSession) {
     const incompleteSessions = sessions.filter(s => !s.isComplete && !s.isImported);
 
+    // Check if user can start a session (must have Google connected and sheet linked)
+    const canStartSession = isGoogleConnected && importedSpreadsheetId;
+
     return (
       <div className="space-y-6">
-        <div className="card-nb">
+        {!canStartSession && (
+          <div className="card-nb bg-nb-orange">
+            <div className="flex items-center gap-4">
+              <div className="text-4xl">📊</div>
+              <div>
+                <h3 className="text-nb-black">Link a Google Sheet to get started</h3>
+                <p className="text-sm text-nb-black opacity-80">
+                  {!isGoogleConnected
+                    ? 'Connect to Google Drive and link a spreadsheet to track your games.'
+                    : 'Click the "Link" button in the header to connect a Google Sheet.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={`card-nb ${!canStartSession ? 'opacity-50 pointer-events-none' : ''}`}>
           <h2 className="mb-6">Start New Session</h2>
           <form onSubmit={handleSessionSubmit(onCreateSession)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -191,13 +291,6 @@ const PlayPage: React.FC = () => {
               <div>
                 <label className="block text-sm font-semibold mb-1">Date</label>
                 <input type="date" {...registerSession('date')} className="input-nb" required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold mb-1">Game Type</label>
-                <select {...registerSession('gameType')} className="select-nb">
-                  <option value="cash">Cash Game</option>
-                  <option value="tournament">Tournament</option>
-                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Stakes (optional)</label>
@@ -216,13 +309,13 @@ const PlayPage: React.FC = () => {
                 />
               </div>
             </div>
-            <button type="submit" className="btn-nb-primary">
+            <button type="submit" className="btn-nb-primary" disabled={!canStartSession}>
               Start Session
             </button>
           </form>
         </div>
 
-        {incompleteSessions.length > 0 && (
+        {incompleteSessions.length > 0 && canStartSession && (
           <div className="card-nb">
             <h2 className="mb-4">Resume Session</h2>
             <div className="space-y-2">
@@ -230,14 +323,21 @@ const PlayPage: React.FC = () => {
                 <button
                   key={session.id}
                   onClick={() => dispatch(setActiveSession(session.id))}
-                  className="w-full text-left p-4 border-3 border-nb-black bg-nb-white shadow-nb-sm hover:shadow-nb-hover hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                  className="w-full text-left p-4 border-3 hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                  style={{
+                    backgroundColor: 'var(--color-bg-card)',
+                    borderColor: 'var(--color-border)',
+                    boxShadow: '2px 2px 0px 0px var(--color-shadow)',
+                  }}
                 >
                   <div className="font-semibold">
                     {session.name || new Date(session.date).toLocaleDateString()}
                   </div>
-                  <div className="text-sm text-gray-600">
-                    {session.gameType} {session.stakes && `- ${session.stakes}`}
-                    {session.location && ` @ ${session.location}`}
+                  <div className="text-sm text-theme-secondary">
+                    {session.stakes && `${session.stakes}`}
+                    {session.stakes && session.location && ' @ '}
+                    {!session.stakes && session.location && '@ '}
+                    {session.location}
                   </div>
                 </button>
               ))}
@@ -264,14 +364,21 @@ const PlayPage: React.FC = () => {
                   day: 'numeric',
                 })}
             </h2>
-            <p className="text-gray-600">
-              {activeSession.gameType === 'cash' ? 'Cash Game' : 'Tournament'}
-              {activeSession.stakes && ` - ${activeSession.stakes}`}
-              {activeSession.location && ` @ ${activeSession.location}`}
-            </p>
+            {(activeSession.stakes || activeSession.location) && (
+              <p className="text-theme-secondary">
+                {activeSession.stakes}
+                {activeSession.stakes && activeSession.location && ' @ '}
+                {!activeSession.stakes && activeSession.location && '@ '}
+                {activeSession.location}
+              </p>
+            )}
           </div>
-          <button onClick={handleEndSession} className="btn-nb-danger">
-            End Session
+          <button
+            onClick={handleEndSession}
+            disabled={isSavingToSheet}
+            className={`btn-nb-danger ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
+          >
+            {isSavingToSheet ? 'Saving...' : 'End Session'}
           </button>
         </div>
       </div>
@@ -289,7 +396,14 @@ const PlayPage: React.FC = () => {
               <div className="text-2xl font-bold">{formatMoney(cashOutTotal)}</div>
             </div>
           )}
-          <button onClick={() => setShowAddPlayer(true)} className="btn-nb bg-nb-white">
+          <button
+            onClick={() => {
+              setPlayerValue('buyInAmount', mostCommonBuyIn);
+              setShowAddPlayer(true);
+            }}
+            className="btn-nb"
+            style={{ backgroundColor: 'var(--color-bg-card)' }}
+          >
             + Add Player
           </button>
         </div>
@@ -299,7 +413,7 @@ const PlayPage: React.FC = () => {
       <div className="card-nb overflow-x-auto">
         <h3 className="mb-4">Players</h3>
         {activePlayerSessions.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">
+          <p className="text-theme-secondary text-center py-8">
             No players yet. Add a player to get started.
           </p>
         ) : (
@@ -329,13 +443,17 @@ const PlayPage: React.FC = () => {
                           </span>
                         ))}
                         <button
-                          onClick={() => setShowBuyInModal(ps.id)}
-                          className="w-6 h-6 flex items-center justify-center border-2 border-nb-black bg-nb-white text-xs font-bold hover:bg-nb-yellow"
+                          onClick={() => {
+                            setBuyInAmount(mostCommonBuyIn.toString());
+                            setShowBuyInModal(ps.id);
+                          }}
+                          className="w-6 h-6 flex items-center justify-center border-2 text-xs font-bold hover:bg-nb-yellow"
+                          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-card)' }}
                         >
                           +
                         </button>
                       </div>
-                      <div className="text-sm text-gray-600 mt-1">
+                      <div className="text-sm text-theme-secondary mt-1">
                         Total: {formatMoney(totalBuyIns)}
                       </div>
                     </td>
@@ -361,7 +479,7 @@ const PlayPage: React.FC = () => {
                           {formatMoneyWithSign(netResult)}
                         </span>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-theme-secondary">-</span>
                       )}
                     </td>
                     <td>
@@ -393,7 +511,8 @@ const PlayPage: React.FC = () => {
                   setShowAddPlayer(false);
                   resetPlayer();
                 }}
-                className="w-8 h-8 flex items-center justify-center border-2 border-nb-black font-bold"
+                className="w-8 h-8 flex items-center justify-center border-2 font-bold"
+                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-card)' }}
               >
                 X
               </button>
@@ -403,11 +522,14 @@ const PlayPage: React.FC = () => {
                 <label className="block text-sm font-semibold mb-1">Player</label>
                 <select {...registerPlayer('playerId')} className="select-nb" required>
                   <option value="">Select a player</option>
-                  {availablePlayers.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
+                  {sortedAvailablePlayers.map(p => {
+                    const gameCount = playerGameCounts.get(p.id) || 0;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({gameCount} {gameCount === 1 ? 'game' : 'games'})
+                      </option>
+                    );
+                  })}
                   <option value="new">+ New Player</option>
                 </select>
               </div>

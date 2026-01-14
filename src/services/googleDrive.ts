@@ -1,6 +1,10 @@
 import type { AppData } from '../types';
 
 const APP_DATA_FILE_NAME = 'poker-tracker-data.json';
+const STORAGE_KEY_TOKEN = 'poker-tracker-google-token';
+const STORAGE_KEY_USER = 'poker-tracker-google-user';
+const STORAGE_KEY_SPREADSHEET_ID = 'poker-tracker-spreadsheet-id';
+
 const INITIAL_APP_DATA: AppData = {
   version: '1.0',
   players: [],
@@ -9,25 +13,127 @@ const INITIAL_APP_DATA: AppData = {
   lastModified: new Date().toISOString(),
 };
 
-// Google API configuration
-// Users need to set up their own Google Cloud project and replace this
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+// Google API scopes
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/spreadsheets', // Full access to read/write sheets
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+].join(' ');
+
+export interface GoogleUserInfo {
+  id: string;
+  email: string;
+  name: string;
+  picture: string;
+}
 
 class GoogleDriveService {
   private accessToken: string | null = null;
   private fileId: string | null = null;
 
-  setAccessToken(token: string) {
+  setAccessToken(token: string, persist: boolean = true) {
     this.accessToken = token;
+    if (persist) {
+      localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    }
+  }
+
+  getAccessToken(): string | null {
+    return this.accessToken;
   }
 
   clearAccessToken() {
     this.accessToken = null;
     this.fileId = null;
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+    localStorage.removeItem(STORAGE_KEY_USER);
+    localStorage.removeItem(STORAGE_KEY_SPREADSHEET_ID);
   }
 
   isAuthenticated(): boolean {
     return this.accessToken !== null;
+  }
+
+  // Get stored token from localStorage
+  getStoredToken(): string | null {
+    return localStorage.getItem(STORAGE_KEY_TOKEN);
+  }
+
+  // Get stored user from localStorage
+  getStoredUser(): GoogleUserInfo | null {
+    const stored = localStorage.getItem(STORAGE_KEY_USER);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Save user info to localStorage
+  saveUserInfo(user: GoogleUserInfo) {
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+  }
+
+  // Get stored spreadsheet ID
+  getStoredSpreadsheetId(): string | null {
+    return localStorage.getItem(STORAGE_KEY_SPREADSHEET_ID);
+  }
+
+  // Save spreadsheet ID to localStorage
+  saveSpreadsheetId(id: string) {
+    localStorage.setItem(STORAGE_KEY_SPREADSHEET_ID, id);
+  }
+
+  // Fetch user info from Google
+  async fetchUserInfo(): Promise<GoogleUserInfo> {
+    if (!this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(
+      'https://www.googleapis.com/oauth2/v2/userinfo',
+      {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user info');
+    }
+
+    const data = await response.json();
+    const userInfo: GoogleUserInfo = {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      picture: data.picture,
+    };
+
+    this.saveUserInfo(userInfo);
+    return userInfo;
+  }
+
+  // Validate stored token is still valid
+  async validateToken(): Promise<boolean> {
+    if (!this.accessToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${this.accessToken}`
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   private async makeRequest(
@@ -48,7 +154,7 @@ class GoogleDriveService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Google Drive API error: ${response.status} - ${errorText}`);
+      throw new Error(`Google API error: ${response.status} - ${errorText}`);
     }
 
     return response;
@@ -163,6 +269,175 @@ class GoogleDriveService {
       );
       this.fileId = null;
     }
+  }
+
+  // Fetch spreadsheet data from Google Sheets
+  async getSpreadsheetData(spreadsheetId: string): Promise<string[][]> {
+    try {
+      // First, get spreadsheet metadata to find the first sheet name
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`
+      );
+      const metadata = await metaResponse.json();
+
+      if (!metadata.sheets || metadata.sheets.length === 0) {
+        throw new Error('Spreadsheet has no sheets');
+      }
+
+      const firstSheetName = metadata.sheets[0].properties.title;
+
+      // Fetch all data from the first sheet
+      const response = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      );
+
+      const data = await response.json();
+      return data.values || [];
+    } catch (error) {
+      console.error('Error fetching spreadsheet data:', error);
+      throw error;
+    }
+  }
+
+  // Append a new session column to the rightmost side of the spreadsheet
+  async appendSessionColumn(
+    spreadsheetId: string,
+    sessionDate: Date,
+    playerResults: { playerName: string; netResult: number }[]
+  ): Promise<void> {
+    try {
+      // Get spreadsheet metadata
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      );
+      const metadata = await metaResponse.json();
+
+      if (!metadata.sheets || metadata.sheets.length === 0) {
+        throw new Error('Spreadsheet has no sheets');
+      }
+
+      const firstSheetName = metadata.sheets[0].properties.title;
+
+      // Get existing data to find the rightmost column and player rows
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      );
+      const existingData = await dataResponse.json();
+      const rows: (string | number)[][] = existingData.values || [];
+
+      if (rows.length === 0) {
+        throw new Error('Spreadsheet is empty');
+      }
+
+      // Find the rightmost column with data
+      let maxCol = 0;
+      for (const row of rows) {
+        if (row.length > maxCol) {
+          maxCol = row.length;
+        }
+      }
+
+      // Create a map of player names to row indices (case-insensitive)
+      const playerRowMap = new Map<string, number>();
+      for (let i = 1; i < rows.length; i++) {
+        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        if (playerName) {
+          playerRowMap.set(playerName, i);
+        }
+      }
+
+      // Build the column data
+      // First cell is the date header (as MM/DD/YYYY string)
+      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+
+      // Create column values array with the date in the header row
+      const columnValues: (string | number)[][] = [[dateStr]];
+
+      // Fill in player results
+      for (let i = 1; i < rows.length; i++) {
+        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        const result = playerResults.find(
+          pr => pr.playerName.toLowerCase() === playerName
+        );
+
+        if (result) {
+          columnValues.push([result.netResult]);
+        } else {
+          // Player didn't participate in this session
+          columnValues.push(['']);
+        }
+      }
+
+      // Check if any new players need to be added
+      const existingPlayers = new Set(playerRowMap.keys());
+      const newPlayers = playerResults.filter(
+        pr => !existingPlayers.has(pr.playerName.toLowerCase())
+      );
+
+      // Add new players to the end
+      for (const newPlayer of newPlayers) {
+        columnValues.push([newPlayer.netResult]);
+      }
+
+      // Convert column index to letter (A, B, C, ... AA, AB, etc.)
+      const colLetter = this.columnIndexToLetter(maxCol);
+      const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
+
+      // Write the new column
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            range,
+            majorDimension: 'COLUMNS',
+            values: [columnValues.map(v => v[0])],
+          }),
+        }
+      );
+
+      // If there are new players, we need to add their names in column A
+      if (newPlayers.length > 0) {
+        const startRow = rows.length + 1;
+        const namesRange = `${firstSheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
+
+        await this.makeRequest(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(namesRange)}?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              range: namesRange,
+              majorDimension: 'ROWS',
+              values: newPlayers.map(p => [p.playerName]),
+            }),
+          }
+        );
+      }
+
+      console.log('Successfully appended session to spreadsheet');
+    } catch (error) {
+      console.error('Error appending session to spreadsheet:', error);
+      throw error;
+    }
+  }
+
+  // Helper to convert column index (0-based) to column letter
+  private columnIndexToLetter(index: number): string {
+    let letter = '';
+    let temp = index;
+
+    while (temp >= 0) {
+      letter = String.fromCharCode((temp % 26) + 65) + letter;
+      temp = Math.floor(temp / 26) - 1;
+    }
+
+    return letter;
   }
 }
 

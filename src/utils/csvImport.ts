@@ -39,6 +39,52 @@ function parseDate(dateStr: string): Date | null {
   return null;
 }
 
+// Convert Excel/Google Sheets serial date number to JavaScript Date
+// Serial dates are the number of days since December 30, 1899
+function serialDateToDate(serial: number): Date | null {
+  // Valid serial dates are roughly between 1 (Jan 1, 1900) and 60000+ (year 2060+)
+  // Filter out values that are clearly not dates
+  if (serial < 1 || serial > 100000) {
+    return null;
+  }
+
+  // Excel/Sheets serial date epoch is December 30, 1899
+  // 25569 is the number of days between Dec 30, 1899 and Jan 1, 1970 (Unix epoch)
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  const date = new Date((serial - 25569) * millisecondsPerDay);
+
+  // Validate it's a reasonable date (between 1990 and 2100)
+  const year = date.getFullYear();
+  if (year >= 1990 && year <= 2100) {
+    return date;
+  }
+
+  return null;
+}
+
+// Parse a value that could be a date string or serial number
+function parseDateValue(value: string | number | null | undefined): Date | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  // If it's a number, try to parse as serial date
+  if (typeof value === 'number') {
+    return serialDateToDate(value);
+  }
+
+  const strValue = String(value).trim();
+
+  // Try parsing as a number (serial date)
+  const numValue = parseFloat(strValue);
+  if (!isNaN(numValue) && strValue === String(numValue)) {
+    return serialDateToDate(numValue);
+  }
+
+  // Try parsing as date string
+  return parseDate(strValue);
+}
+
 function parseMoney(value: string): number | null {
   if (!value || value.trim() === '') {
     return null;
@@ -235,6 +281,160 @@ export function processCSVFile(file: File): Promise<ParsedCSVData> {
 
     reader.readAsText(file);
   });
+}
+
+// Parse spreadsheet data from Google Sheets API (array of arrays)
+export function parseSpreadsheetData(data: (string | number | null | undefined)[][]): ParsedCSVData {
+  const errors: CSVImportError[] = [];
+  const warnings: CSVImportWarning[] = [];
+  const players: Player[] = [];
+  const sessions: Session[] = [];
+  const playerSessions: PlayerSession[] = [];
+
+  const playerMap = new Map<string, Player>();
+  const sessionTotals = new Map<string, number>();
+
+  if (data.length < 2) {
+    errors.push({
+      line: 1,
+      message: 'Spreadsheet must have at least a header row and one data row',
+    });
+    return { players, sessions, playerSessions, errors, warnings };
+  }
+
+  const headerRow = data[0];
+
+  // Find date columns - scan all columns and collect those that are valid dates
+  // Dates can be serial numbers (Google Sheets format) or date strings
+  const dateColumns: { index: number; date: Date }[] = [];
+  let foundFirstDate = false;
+
+  for (let i = 1; i < headerRow.length; i++) {
+    const cellValue = headerRow[i];
+
+    // Try to parse as date (handles both serial numbers and date strings)
+    const date = parseDateValue(cellValue);
+
+    if (date) {
+      foundFirstDate = true;
+      dateColumns.push({ index: i, date });
+    } else if (foundFirstDate) {
+      // Once we've found dates, stop when we hit a non-date column
+      // This handles cases where there are summary columns after dates
+      break;
+    }
+    // If we haven't found any dates yet, keep scanning (skip columns like "FY22", "Totals", etc.)
+  }
+
+  if (dateColumns.length === 0) {
+    errors.push({
+      line: 1,
+      message: 'No valid date columns found. Expected date format (MM/DD/YYYY) or Google Sheets date values.',
+      data: String(headerRow.slice(0, 10).join(',')), // Show first 10 columns
+    });
+    return { players, sessions, playerSessions, errors, warnings };
+  }
+
+  // Create sessions for each date column
+  const now = new Date().toISOString();
+  dateColumns.forEach(({ date }) => {
+    const session: Session = {
+      id: uuidv4(),
+      date: date.toISOString(),
+      gameType: 'cash',
+      isComplete: true,
+      isImported: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    sessions.push(session);
+    sessionTotals.set(session.id, 0);
+  });
+
+  // Process player rows
+  for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+    const row = data[rowIndex];
+    const playerName = String(row[0] ?? '').trim();
+
+    if (!playerName) {
+      continue; // Skip empty rows
+    }
+
+    // Get or create player
+    let player = playerMap.get(playerName.toLowerCase());
+    if (!player) {
+      player = {
+        id: uuidv4(),
+        name: playerName,
+        createdAt: now,
+        updatedAt: now,
+      };
+      playerMap.set(playerName.toLowerCase(), player);
+      players.push(player);
+    } else {
+      // Warn about duplicate player names
+      warnings.push({
+        sessionDate: 'N/A',
+        message: `Duplicate player name found: "${playerName}"`,
+      });
+    }
+
+    // Process each date column for this player
+    dateColumns.forEach(({ index }, sessionIndex) => {
+      const session = sessions[sessionIndex];
+      const cellValue = row[index];
+
+      // Handle both string and number values from Google Sheets
+      let amount: number | null = null;
+      if (typeof cellValue === 'number') {
+        amount = cellValue;
+      } else if (typeof cellValue === 'string') {
+        amount = parseMoney(cellValue);
+      }
+
+      if (amount !== null) {
+        // Create a buy-in record (we'll use net result since spreadsheet only has final results)
+        const buyIn: BuyIn = {
+          id: uuidv4(),
+          amount: 0, // We don't know actual buy-in from spreadsheet
+          timestamp: session.date,
+        };
+
+        const playerSession: PlayerSession = {
+          id: uuidv4(),
+          playerId: player!.id,
+          sessionId: session.id,
+          buyIns: [buyIn],
+          cashOut: undefined,
+          netResult: amount,
+          timestamp: session.date,
+        };
+        playerSessions.push(playerSession);
+
+        // Track session totals for zero-sum validation
+        const currentTotal = sessionTotals.get(session.id) || 0;
+        sessionTotals.set(session.id, currentTotal + amount);
+      }
+    });
+  }
+
+  // Validate zero-sum for each session
+  sessions.forEach((session) => {
+    const total = sessionTotals.get(session.id) || 0;
+    if (Math.abs(total) > 0.01) {
+      const formattedDate = new Date(session.date).toLocaleDateString('en-US', {
+        month: 'numeric',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      warnings.push({
+        sessionDate: formattedDate,
+        message: `Session does not sum to zero. Difference: $${total.toFixed(2)}`,
+      });
+    }
+  });
+
+  return { players, sessions, playerSessions, errors, warnings };
 }
 
 export function generateImportReport(result: ParsedCSVData): CSVImportResult {

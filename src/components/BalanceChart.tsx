@@ -13,6 +13,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import type { PlayerStatistics } from '../types';
 import { formatMoney, formatDateShort } from '../utils/statistics';
+import { useTheme } from '../hooks/useTheme';
 
 // Register Chart.js components
 ChartJS.register(
@@ -44,9 +45,17 @@ interface BalanceChartProps {
 }
 
 const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
+  const { isDark } = useTheme();
+
+  // Theme-aware colors
+  const gridColor = isDark ? '#374151' : '#e5e5e5';
+  const textColor = isDark ? '#f8fafc' : '#000000';
+  const tooltipBg = isDark ? '#1e293b' : '#000000';
+  const tooltipBorder = isDark ? '#475569' : '#000000';
+
   if (data.length === 0 || data.every(d => d.balanceHistory.length === 0)) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-500">
+      <div className="h-full flex items-center justify-center text-theme-secondary">
         No balance history data available
       </div>
     );
@@ -142,13 +151,16 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
             family: 'Inter, system-ui, sans-serif',
             weight: 'bold',
           },
+          color: textColor,
           padding: 16,
           usePointStyle: true,
           pointStyle: 'rectRounded',
         },
       },
       tooltip: {
-        backgroundColor: '#000',
+        backgroundColor: tooltipBg,
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
         titleFont: {
           family: 'Space Grotesk, system-ui, sans-serif',
           weight: 'bold',
@@ -158,7 +170,7 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
         },
         padding: 12,
         cornerRadius: 0,
-        borderColor: '#000',
+        borderColor: tooltipBorder,
         borderWidth: 2,
         callbacks: {
           label: (context) => {
@@ -172,9 +184,10 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
     scales: {
       x: {
         grid: {
-          color: '#e5e5e5',
+          color: gridColor,
         },
         ticks: {
+          color: textColor,
           font: {
             family: 'Inter, system-ui, sans-serif',
           },
@@ -182,9 +195,10 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
       },
       y: {
         grid: {
-          color: '#e5e5e5',
+          color: gridColor,
         },
         ticks: {
+          color: textColor,
           font: {
             family: 'Inter, system-ui, sans-serif',
           },

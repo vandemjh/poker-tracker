@@ -105,7 +105,7 @@ const ResultsPage: React.FC = () => {
       <div className="card-nb text-center py-12">
         <div className="text-6xl mb-4">📊</div>
         <h2 className="mb-4">No Data Yet</h2>
-        <p className="text-gray-600 mb-6">
+        <p className="text-theme-secondary mb-6">
           Import a CSV file or start a new game session to see your statistics.
         </p>
       </div>
@@ -163,8 +163,8 @@ const ResultsPage: React.FC = () => {
             onClick={handleToggleAll}
             className={`badge-nb cursor-pointer transition-colors ${
               selectedPlayers.length === statistics.length || selectedPlayers.length === 0
-                ? 'bg-nb-yellow'
-                : 'bg-gray-200'
+                ? 'bg-nb-yellow text-nb-black'
+                : 'bg-theme-card'
             }`}
           >
             {selectedPlayers.length === 0 ? 'All' : 'Toggle All'}
@@ -176,7 +176,7 @@ const ResultsPage: React.FC = () => {
               className={`badge-nb cursor-pointer transition-colors ${
                 selectedPlayers.length === 0 || selectedPlayers.includes(stat.playerId)
                   ? 'bg-nb-blue text-nb-white'
-                  : 'bg-gray-200'
+                  : 'bg-theme-card'
               }`}
             >
               {stat.playerName}
@@ -197,49 +197,49 @@ const ResultsPage: React.FC = () => {
             <tr>
               <th>Player</th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('totalProfit'))}
               >
                 Total P/L {getSortIcon('totalProfit')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('sessionCount'))}
               >
                 Sessions {getSortIcon('sessionCount')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('winRate'))}
               >
                 Win Rate {getSortIcon('winRate')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('avgWinLoss'))}
               >
                 Avg W/L {getSortIcon('avgWinLoss')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('bestSession'))}
               >
                 Best {getSortIcon('bestSession')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('worstSession'))}
               >
                 Worst {getSortIcon('worstSession')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('variance'))}
               >
                 Variance {getSortIcon('variance')}
               </th>
               <th
-                className="cursor-pointer hover:bg-gray-800"
+                className="cursor-pointer hover:opacity-80"
                 onClick={() => dispatch(setSortColumn('roi'))}
               >
                 ROI {getSortIcon('roi')}

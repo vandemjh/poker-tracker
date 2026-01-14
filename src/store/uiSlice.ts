@@ -1,6 +1,15 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { DateRangeFilter, SyncStatus } from '../types';
 
+interface GoogleUserInfo {
+  id: string;
+  email: string;
+  name: string;
+  picture: string;
+}
+
+type Theme = 'system' | 'light' | 'dark';
+
 interface UIState {
   isLoading: boolean;
   error: string | null;
@@ -11,6 +20,9 @@ interface UIState {
   sortDirection: 'asc' | 'desc';
   syncStatus: SyncStatus;
   isGoogleConnected: boolean;
+  googleUser: GoogleUserInfo | null;
+  importedSpreadsheetId: string | null; // Track the Google Sheet we imported from
+  theme: Theme;
 }
 
 const initialState: UIState = {
@@ -31,6 +43,9 @@ const initialState: UIState = {
     error: null,
   },
   isGoogleConnected: false,
+  googleUser: null,
+  importedSpreadsheetId: null,
+  theme: 'system',
 };
 
 const uiSlice = createSlice({
@@ -90,12 +105,24 @@ const uiSlice = createSlice({
     },
     setGoogleConnected: (state, action: PayloadAction<boolean>) => {
       state.isGoogleConnected = action.payload;
+      if (!action.payload) {
+        state.googleUser = null;
+      }
+    },
+    setGoogleUser: (state, action: PayloadAction<GoogleUserInfo | null>) => {
+      state.googleUser = action.payload;
     },
     markUnsyncedChanges: (state) => {
       state.syncStatus.hasUnsyncedChanges = true;
     },
     clearUnsyncedChanges: (state) => {
       state.syncStatus.hasUnsyncedChanges = false;
+    },
+    setImportedSpreadsheetId: (state, action: PayloadAction<string | null>) => {
+      state.importedSpreadsheetId = action.payload;
+    },
+    setTheme: (state, action: PayloadAction<Theme>) => {
+      state.theme = action.payload;
     },
   },
 });
@@ -115,7 +142,10 @@ export const {
   setSortColumn,
   setSyncStatus,
   setGoogleConnected,
+  setGoogleUser,
   markUnsyncedChanges,
   clearUnsyncedChanges,
+  setImportedSpreadsheetId,
+  setTheme,
 } = uiSlice.actions;
 export default uiSlice.reducer;
