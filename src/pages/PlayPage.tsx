@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
@@ -22,6 +22,9 @@ import { formatMoney, formatMoneyWithSign, validateZeroSum } from '../utils/stat
 import { googleDriveService } from '../services/googleDrive';
 import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
+
+// Polling interval for collaborative updates (in ms)
+const POLL_INTERVAL = 5000;
 
 // Helper to save session data to localStorage for resume feature
 const SAVED_SESSION_KEY = 'poker_tracker_saved_session';
@@ -49,6 +52,14 @@ const PlayPage: React.FC = () => {
   const [cashOutAmount, setCashOutAmount] = useState('');
   const [isSavingToSheet, setIsSavingToSheet] = useState(false);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
+  const [isSyncingInProgress, setIsSyncingInProgress] = useState(false);
+  const [remoteInProgressGame, setRemoteInProgressGame] = useState<{
+    date: Date;
+    players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
+  } | null>(null);
+  const [showJoinGameModal, setShowJoinGameModal] = useState(false);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedDataRef = useRef<string>('');
 
   const activeSession = useMemo(() => {
     return sessions.find(s => s.id === activeSessionId);
@@ -68,6 +79,160 @@ const PlayPage: React.FC = () => {
   const cashOutTotal = useMemo(() => {
     return activePlayerSessions.reduce((sum, ps) => sum + (ps.cashOut || 0), 0);
   }, [activePlayerSessions]);
+
+  // Sync in-progress game state to spreadsheet
+  const syncInProgressToSheet = useCallback(async () => {
+    if (!isGoogleConnected || !importedSpreadsheetId || !activeSession || !activeSessionId) {
+      return;
+    }
+
+    // Build player data for the spreadsheet
+    const playerData = activePlayerSessions.map(ps => {
+      const player = players.find(p => p.id === ps.playerId);
+      const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
+      return {
+        playerName: player?.name || 'Unknown',
+        totalBuyIn,
+        cashOut: ps.cashOut,
+      };
+    });
+
+    // Check if data has actually changed to avoid unnecessary API calls
+    const dataHash = JSON.stringify(playerData);
+    if (dataHash === lastSyncedDataRef.current) {
+      return;
+    }
+
+    try {
+      setIsSyncingInProgress(true);
+      await googleDriveService.updateInProgressSession(
+        importedSpreadsheetId,
+        new Date(activeSession.date),
+        playerData
+      );
+      lastSyncedDataRef.current = dataHash;
+      console.log('Synced in-progress game to spreadsheet');
+    } catch (error) {
+      console.error('Error syncing in-progress game:', error);
+    } finally {
+      setIsSyncingInProgress(false);
+    }
+  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players]);
+
+  // Check for in-progress game from spreadsheet on mount
+  const checkForRemoteInProgressGame = useCallback(async () => {
+    if (!isGoogleConnected || !importedSpreadsheetId || activeSessionId) {
+      return;
+    }
+
+    try {
+      const remoteGame = await googleDriveService.getInProgressGame(importedSpreadsheetId);
+      if (remoteGame && remoteGame.players.length > 0) {
+        setRemoteInProgressGame(remoteGame);
+        setShowJoinGameModal(true);
+      }
+    } catch (error) {
+      console.error('Error checking for remote in-progress game:', error);
+    }
+  }, [isGoogleConnected, importedSpreadsheetId, activeSessionId]);
+
+  // Poll for updates from other collaborators
+  const pollForUpdates = useCallback(async () => {
+    if (!isGoogleConnected || !importedSpreadsheetId || !activeSession) {
+      return;
+    }
+
+    try {
+      const remoteGame = await googleDriveService.getInProgressGame(importedSpreadsheetId);
+      if (!remoteGame) return;
+
+      // Compare remote data with local data and update if different
+      const localPlayerData = activePlayerSessions.map(ps => {
+        const player = players.find(p => p.id === ps.playerId);
+        const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
+        return {
+          playerName: player?.name || 'Unknown',
+          totalBuyIn,
+          cashOut: ps.cashOut,
+        };
+      });
+
+      const localHash = JSON.stringify(localPlayerData.sort((a, b) => a.playerName.localeCompare(b.playerName)));
+      const remoteHash = JSON.stringify(remoteGame.players.sort((a, b) => a.playerName.localeCompare(b.playerName)));
+
+      if (localHash !== remoteHash) {
+        // Remote has different data - update local state
+        console.log('Detected remote changes, updating local state...');
+
+        // For each remote player, find or create local player and update their session
+        for (const remotePlayer of remoteGame.players) {
+          let localPlayer = players.find(p => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase());
+
+          // If player doesn't exist locally, add them
+          if (!localPlayer) {
+            dispatch(addPlayer({ name: remotePlayer.playerName }));
+            // Get the newly added player from the store
+            const state = (window as any).__REDUX_STORE__?.getState?.();
+            if (state) {
+              localPlayer = state.players.players.find(
+                (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+              );
+            }
+          }
+
+          if (!localPlayer) continue;
+
+          // Check if player is already in the session
+          const existingPs = activePlayerSessions.find(ps => ps.playerId === localPlayer!.id);
+
+          if (!existingPs) {
+            // Add player to session with buy-in amount from remote
+            dispatch(addPlayerToSession({
+              sessionId: activeSessionId!,
+              playerId: localPlayer.id,
+              buyInAmount: remotePlayer.totalBuyIn,
+            }));
+          } else {
+            // Update cash-out if different
+            if (remotePlayer.cashOut !== undefined && existingPs.cashOut !== remotePlayer.cashOut) {
+              dispatch(setCashOut({
+                playerSessionId: existingPs.id,
+                amount: remotePlayer.cashOut,
+              }));
+            }
+          }
+        }
+
+        // Update the last synced data ref to avoid re-syncing
+        lastSyncedDataRef.current = remoteHash;
+      }
+    } catch (error) {
+      console.error('Error polling for updates:', error);
+    }
+  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players, dispatch]);
+
+  // Start/stop polling when active session changes
+  useEffect(() => {
+    if (activeSession && isGoogleConnected && importedSpreadsheetId) {
+      // Start polling
+      pollIntervalRef.current = setInterval(pollForUpdates, POLL_INTERVAL);
+
+      // Initial sync when session becomes active
+      syncInProgressToSheet();
+
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
+    }
+  }, [activeSession, isGoogleConnected, importedSpreadsheetId, pollForUpdates, syncInProgressToSheet]);
+
+  // Check for remote in-progress game on mount
+  useEffect(() => {
+    checkForRemoteInProgressGame();
+  }, [checkForRemoteInProgressGame]);
 
   const { register: registerSession, handleSubmit: handleSessionSubmit, reset: resetSession } =
     useForm<CreateSessionForm>({
@@ -124,6 +289,8 @@ const PlayPage: React.FC = () => {
                 buyInAmount: data.buyInAmount,
               })
             );
+            // Sync to spreadsheet after adding player
+            setTimeout(() => syncInProgressToSheet(), 100);
           }
         }
       }, 0);
@@ -135,6 +302,8 @@ const PlayPage: React.FC = () => {
           buyInAmount: data.buyInAmount,
         })
       );
+      // Sync to spreadsheet after adding player
+      setTimeout(() => syncInProgressToSheet(), 100);
     }
 
     dispatch(markUnsyncedChanges());
@@ -147,6 +316,8 @@ const PlayPage: React.FC = () => {
     if (!isNaN(amount) && amount > 0) {
       dispatch(addBuyIn({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
+      // Sync to spreadsheet after adding buy-in
+      setTimeout(() => syncInProgressToSheet(), 100);
     }
     setBuyInAmount('');
     setShowBuyInModal(null);
@@ -157,6 +328,8 @@ const PlayPage: React.FC = () => {
     if (!isNaN(amount) && amount >= 0) {
       dispatch(setCashOut({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
+      // Sync to spreadsheet after cash out
+      setTimeout(() => syncInProgressToSheet(), 100);
     }
     setCashOutAmount('');
     setShowCashOutModal(null);
@@ -197,6 +370,17 @@ const PlayPage: React.FC = () => {
       try {
         setIsSavingToSheet(true);
 
+        // Get session date
+        const sessionDate = new Date(activeSession.date);
+
+        // First, delete the in-progress column (if it exists)
+        try {
+          await googleDriveService.deleteInProgressColumn(importedSpreadsheetId, sessionDate);
+          console.log('Deleted in-progress column');
+        } catch (deleteError) {
+          console.error('Error deleting IP column (continuing anyway):', deleteError);
+        }
+
         // Build player results for the spreadsheet
         const playerResults = activePlayerSessions.map(ps => {
           const player = players.find(p => p.id === ps.playerId);
@@ -205,9 +389,6 @@ const PlayPage: React.FC = () => {
             netResult: ps.netResult,
           };
         });
-
-        // Get session date
-        const sessionDate = new Date(activeSession.date);
 
         // Append to the Google Sheet
         await googleDriveService.appendSessionColumn(
@@ -625,7 +806,12 @@ const PlayPage: React.FC = () => {
                     <td>
                       {ps.cashOut === undefined && (
                         <button
-                          onClick={() => dispatch(removePlayerFromSession(ps.id))}
+                          onClick={() => {
+                            dispatch(removePlayerFromSession(ps.id));
+                            dispatch(markUnsyncedChanges());
+                            // Sync to spreadsheet after removing player
+                            setTimeout(() => syncInProgressToSheet(), 100);
+                          }}
                           className="text-nb-red hover:underline text-sm"
                         >
                           Remove
@@ -689,6 +875,7 @@ const PlayPage: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
+                  inputMode="decimal"
                   {...registerPlayer('buyInAmount', { valueAsNumber: true })}
                   className="input-nb"
                   required
@@ -725,6 +912,7 @@ const PlayPage: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
+                  inputMode="decimal"
                   value={buyInAmount}
                   onChange={e => setBuyInAmount(e.target.value)}
                   className="input-nb"
@@ -772,6 +960,7 @@ const PlayPage: React.FC = () => {
                   <input
                     type="number"
                     step="0.01"
+                    inputMode="decimal"
                     value={cashOutAmount}
                     onChange={e => setCashOutAmount(e.target.value)}
                     className="input-nb"
@@ -800,6 +989,112 @@ const PlayPage: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Join In-Progress Game Modal */}
+      {showJoinGameModal && remoteInProgressGame && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="card-nb w-full max-w-md mx-4">
+            <h3 className="mb-4">Join In-Progress Game?</h3>
+            <p className="text-theme-secondary mb-4">
+              There's an in-progress game from {remoteInProgressGame.date.toLocaleDateString()} with {remoteInProgressGame.players.length} player{remoteInProgressGame.players.length !== 1 ? 's' : ''}.
+            </p>
+            <div className="text-sm mb-4 max-h-32 overflow-y-auto">
+              {remoteInProgressGame.players.map((p, i) => (
+                <div key={i} className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                  <span>{p.playerName}</span>
+                  <span>Buy-in: {formatMoney(p.totalBuyIn)}{p.cashOut !== undefined && ` | Cash-out: ${formatMoney(p.cashOut)}`}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  // Create a session with the remote game's date and add all players
+                  dispatch(createSession({
+                    date: remoteInProgressGame.date.toISOString().split('T')[0],
+                    gameType: 'cash',
+                  }));
+
+                  // Wait for session to be created, then add players
+                  setTimeout(() => {
+                    const state = (window as any).__REDUX_STORE__?.getState?.();
+                    if (state) {
+                      const newSessionId = state.sessions.activeSessionId;
+                      if (newSessionId) {
+                        for (const remotePlayer of remoteInProgressGame.players) {
+                          // Find or create the player
+                          let localPlayer = state.players.players.find(
+                            (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+                          );
+
+                          if (!localPlayer) {
+                            dispatch(addPlayer({ name: remotePlayer.playerName }));
+                            // Re-fetch state to get the new player
+                            const updatedState = (window as any).__REDUX_STORE__?.getState?.();
+                            if (updatedState) {
+                              localPlayer = updatedState.players.players.find(
+                                (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+                              );
+                            }
+                          }
+
+                          if (localPlayer) {
+                            dispatch(addPlayerToSession({
+                              sessionId: newSessionId,
+                              playerId: localPlayer.id,
+                              buyInAmount: remotePlayer.totalBuyIn,
+                            }));
+
+                            // Set cash-out if it exists
+                            if (remotePlayer.cashOut !== undefined) {
+                              setTimeout(() => {
+                                const latestState = (window as any).__REDUX_STORE__?.getState?.();
+                                if (latestState) {
+                                  const ps = latestState.sessions.playerSessions.find(
+                                    (ps: any) => ps.sessionId === newSessionId && ps.playerId === localPlayer.id
+                                  );
+                                  if (ps) {
+                                    dispatch(setCashOut({
+                                      playerSessionId: ps.id,
+                                      amount: remotePlayer.cashOut!,
+                                    }));
+                                  }
+                                }
+                              }, 50);
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }, 100);
+
+                  setShowJoinGameModal(false);
+                  setRemoteInProgressGame(null);
+                }}
+                className="btn-nb-success"
+              >
+                Join Game
+              </button>
+              <button
+                onClick={() => {
+                  setShowJoinGameModal(false);
+                  setRemoteInProgressGame(null);
+                }}
+                className="btn-nb"
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync indicator */}
+      {isSyncingInProgress && (
+        <div className="fixed bottom-4 right-4 bg-nb-blue text-white px-3 py-2 rounded-lg shadow-lg text-sm">
+          Syncing...
+        </div>
+      )}
     </div>
   );
 };

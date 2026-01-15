@@ -64,8 +64,20 @@ export function calculatePlayerStatistics(
   const worstSession = Math.min(...results);
 
   // Calculate total buy-ins
+  // For imported sessions where buy-in amount is 0, estimate from net result
   const totalBuyIns = completedPlayerSessions.reduce((sum, ps) => {
-    return sum + ps.buyIns.reduce((buyInSum, b) => buyInSum + b.amount, 0);
+    const actualBuyIns = ps.buyIns.reduce((buyInSum, b) => buyInSum + b.amount, 0);
+    if (actualBuyIns > 0) {
+      // Use actual buy-in data when available
+      return sum + actualBuyIns;
+    }
+    // For imported sessions, estimate buy-in as cash-out minus net result
+    // (cash-out = buy-in + netResult, so buy-in = cash-out - netResult)
+    // If no cash-out data, estimate as |netResult| (minimum possible buy-in)
+    if (ps.cashOut !== undefined) {
+      return sum + (ps.cashOut - ps.netResult);
+    }
+    return sum + Math.abs(ps.netResult);
   }, 0);
 
   // Calculate ROI

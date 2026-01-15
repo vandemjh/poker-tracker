@@ -486,11 +486,11 @@ class GoogleDriveService {
   }
 
   // Update or create an "In Progress" session column
+  // Format: "MM/DD/YYYY IP" for in-progress, with values as "buyIn|cashOut" or just "buyIn"
   async updateInProgressSession(
     spreadsheetId: string,
     sessionDate: Date,
-    playerBuyIns: { playerName: string; totalBuyIn: number }[],
-    isComplete: boolean = false
+    playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[]
   ): Promise<void> {
     try {
       // Get spreadsheet metadata
@@ -518,16 +518,15 @@ class GoogleDriveService {
 
       // Format dates
       const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
-      const inProgressHeader = `${dateStr} In Progress`;
-      const finalHeader = dateStr;
+      const inProgressHeader = `${dateStr} IP`;
 
-      // Find existing column for this session (either "In Progress" or final)
+      // Find existing column for this in-progress session
       let existingColIndex = -1;
       const headerRow = rows[0] || [];
 
       for (let i = 0; i < headerRow.length; i++) {
         const header = String(headerRow[i] || '').trim();
-        if (header === inProgressHeader || header === finalHeader) {
+        if (header === inProgressHeader) {
           existingColIndex = i;
           break;
         }
@@ -554,23 +553,23 @@ class GoogleDriveService {
         }
       }
 
-      // Header is "In Progress" during game, just date when complete
-      const headerValue = isComplete ? finalHeader : inProgressHeader;
+      // Build column values - format: "buyIn|cashOut" or just "buyIn" if no cashout
+      const columnValues: (string | number)[] = [inProgressHeader];
 
-      // Build column values - during play, show buy-in amounts (negative since it's money in)
-      const columnValues: (string | number)[] = [headerValue];
-
-      // Fill in player buy-in amounts
+      // Fill in player data
       for (let i = 1; i < rows.length; i++) {
         const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
-        const result = playerBuyIns.find(
+        const result = playerData.find(
           pr => pr.playerName.toLowerCase() === playerName
         );
 
         if (result) {
-          // During active session, show negative buy-in (money on table)
-          // When complete, this will be called with final netResult instead
-          columnValues.push(result.totalBuyIn);
+          // Format: "buyIn|cashOut" or just "buyIn"
+          if (result.cashOut !== undefined) {
+            columnValues.push(`${result.totalBuyIn}|${result.cashOut}`);
+          } else {
+            columnValues.push(`${result.totalBuyIn}|`);
+          }
         } else {
           columnValues.push('');
         }
@@ -578,13 +577,17 @@ class GoogleDriveService {
 
       // Check for new players not in the spreadsheet
       const existingPlayers = new Set(playerRowMap.keys());
-      const newPlayers = playerBuyIns.filter(
+      const newPlayers = playerData.filter(
         pr => !existingPlayers.has(pr.playerName.toLowerCase())
       );
 
       // Add new players to the column
       for (const newPlayer of newPlayers) {
-        columnValues.push(newPlayer.totalBuyIn);
+        if (newPlayer.cashOut !== undefined) {
+          columnValues.push(`${newPlayer.totalBuyIn}|${newPlayer.cashOut}`);
+        } else {
+          columnValues.push(`${newPlayer.totalBuyIn}|`);
+        }
       }
 
       // Write the column
@@ -592,7 +595,7 @@ class GoogleDriveService {
       const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
 
       await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
         {
           method: 'PUT',
           headers: {
@@ -631,6 +634,166 @@ class GoogleDriveService {
     } catch (error) {
       console.error('Error updating in-progress session:', error);
       throw error;
+    }
+  }
+
+  // Delete the "In Progress" column for a given date (called when game ends)
+  async deleteInProgressColumn(
+    spreadsheetId: string,
+    sessionDate: Date
+  ): Promise<void> {
+    try {
+      // Get spreadsheet metadata
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      );
+      const metadata = await metaResponse.json();
+
+      if (!metadata.sheets || metadata.sheets.length === 0) {
+        return; // Nothing to delete
+      }
+
+      const sheetId = metadata.sheets[0].properties.sheetId;
+      const firstSheetName = metadata.sheets[0].properties.title;
+
+      // Get existing data
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      );
+      const existingData = await dataResponse.json();
+      const rows: (string | number)[][] = existingData.values || [];
+
+      if (rows.length === 0) return;
+
+      // Format date and find IP column
+      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+      const inProgressHeader = `${dateStr} IP`;
+
+      const headerRow = rows[0] || [];
+      let ipColIndex = -1;
+
+      for (let i = 0; i < headerRow.length; i++) {
+        const header = String(headerRow[i] || '').trim();
+        if (header === inProgressHeader) {
+          ipColIndex = i;
+          break;
+        }
+      }
+
+      if (ipColIndex === -1) return; // No IP column found
+
+      // Delete the column using batchUpdate
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            requests: [{
+              deleteDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: 'COLUMNS',
+                  startIndex: ipColIndex,
+                  endIndex: ipColIndex + 1,
+                },
+              },
+            }],
+          }),
+        }
+      );
+
+      console.log('Deleted in-progress column');
+    } catch (error) {
+      console.error('Error deleting in-progress column:', error);
+      // Don't throw - this is cleanup, not critical
+    }
+  }
+
+  // Get in-progress game data from spreadsheet
+  async getInProgressGame(
+    spreadsheetId: string
+  ): Promise<{
+    date: Date;
+    players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
+  } | null> {
+    try {
+      // Get spreadsheet metadata
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      );
+      const metadata = await metaResponse.json();
+
+      if (!metadata.sheets || metadata.sheets.length === 0) {
+        return null;
+      }
+
+      const firstSheetName = metadata.sheets[0].properties.title;
+
+      // Get existing data
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      );
+      const existingData = await dataResponse.json();
+      const rows: (string | number)[][] = existingData.values || [];
+
+      if (rows.length === 0) return null;
+
+      // Find IP column
+      const headerRow = rows[0] || [];
+      let ipColIndex = -1;
+      let ipDateStr = '';
+
+      for (let i = 0; i < headerRow.length; i++) {
+        const header = String(headerRow[i] || '').trim();
+        if (header.endsWith(' IP')) {
+          ipColIndex = i;
+          ipDateStr = header.replace(' IP', '');
+          break;
+        }
+      }
+
+      if (ipColIndex === -1) return null;
+
+      // Parse the date
+      const dateParts = ipDateStr.split('/');
+      if (dateParts.length !== 3) return null;
+      const date = new Date(
+        parseInt(dateParts[2], 10),
+        parseInt(dateParts[0], 10) - 1,
+        parseInt(dateParts[1], 10)
+      );
+
+      // Parse player data
+      const players: { playerName: string; totalBuyIn: number; cashOut?: number }[] = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const playerName = String(rows[i]?.[0] ?? '').trim();
+        const cellValue = rows[i]?.[ipColIndex];
+
+        if (playerName && cellValue !== undefined && cellValue !== '') {
+          const valueStr = String(cellValue);
+          const parts = valueStr.split('|');
+
+          if (parts.length >= 1) {
+            const totalBuyIn = parseFloat(parts[0]) || 0;
+            const cashOut = parts[1] ? parseFloat(parts[1]) : undefined;
+
+            if (totalBuyIn > 0) {
+              players.push({ playerName, totalBuyIn, cashOut });
+            }
+          }
+        }
+      }
+
+      if (players.length === 0) return null;
+
+      return { date, players };
+    } catch (error) {
+      console.error('Error getting in-progress game:', error);
+      return null;
     }
   }
 }

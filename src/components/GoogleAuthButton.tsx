@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
 import {
@@ -21,6 +21,8 @@ const GoogleAuthButton: React.FC = () => {
   const { players } = useAppSelector(state => state.players);
 
   const [showDropdown, setShowDropdown] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const hasInitialized = useRef(false);
 
   // Helper function to sync from spreadsheet
   const syncFromSpreadsheet = async (spreadsheetId: string, existingPlayers: typeof players = []) => {
@@ -52,8 +54,12 @@ const GoogleAuthButton: React.FC = () => {
   // Try to restore session on mount
   useEffect(() => {
     const restoreSession = async () => {
+      if (hasInitialized.current) return;
+      hasInitialized.current = true;
+
       const storedToken = googleDriveService.getStoredToken();
       const storedUser = googleDriveService.getStoredUser();
+      const storedSpreadsheetId = googleDriveService.getStoredSpreadsheetId();
 
       if (storedToken && storedUser) {
         // Set the token
@@ -67,15 +73,19 @@ const GoogleAuthButton: React.FC = () => {
           dispatch(setGoogleUser(storedUser));
 
           // Restore spreadsheet ID and auto-sync from it
-          const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
-          if (spreadsheetId) {
-            dispatch(setImportedSpreadsheetId(spreadsheetId));
+          if (storedSpreadsheetId) {
+            dispatch(setImportedSpreadsheetId(storedSpreadsheetId));
             // Auto-sync from spreadsheet - spreadsheet is the source of truth
-            await syncFromSpreadsheet(spreadsheetId);
+            await syncFromSpreadsheet(storedSpreadsheetId);
           }
         } else {
-          // Token expired, clear it
-          googleDriveService.clearAccessToken();
+          // Token expired but we have stored info - prompt to reconnect
+          // Keep user info and spreadsheet ID stored for easy reconnection
+          setNeedsReauth(true);
+          dispatch(setGoogleUser(storedUser)); // Keep user info for display
+          if (storedSpreadsheetId) {
+            dispatch(setImportedSpreadsheetId(storedSpreadsheetId));
+          }
         }
       }
 
@@ -91,6 +101,7 @@ const GoogleAuthButton: React.FC = () => {
         dispatch(setLoading(true));
         googleDriveService.setAccessToken(tokenResponse.access_token);
         dispatch(setGoogleConnected(true));
+        setNeedsReauth(false);
 
         // Fetch and store user info
         const userInfo = await googleDriveService.fetchUserInfo();
@@ -100,7 +111,7 @@ const GoogleAuthButton: React.FC = () => {
         const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
         if (spreadsheetId) {
           dispatch(setImportedSpreadsheetId(spreadsheetId));
-          await syncFromSpreadsheet(spreadsheetId);
+          await syncFromSpreadsheet(spreadsheetId, players);
         }
       } catch (error) {
         console.error('Error connecting to Google Drive:', error);
@@ -121,18 +132,39 @@ const GoogleAuthButton: React.FC = () => {
     googleDriveService.clearAccessToken();
     dispatch(setGoogleConnected(false));
     dispatch(setGoogleUser(null));
+    dispatch(setImportedSpreadsheetId(null));
     dispatch(setSyncStatus({
       lastSyncTime: null,
       hasUnsyncedChanges: false,
       error: null,
     }));
     setShowDropdown(false);
+    setNeedsReauth(false);
   };
 
   // Show loading state while restoring
   if (isInitializing) {
     return (
       <div className="w-10 h-10 rounded-full bg-theme-card animate-pulse border-3" style={{ borderColor: 'var(--color-border)' }} />
+    );
+  }
+
+  // Show reconnect button if token expired but we have user info
+  if (needsReauth && googleUser) {
+    return (
+      <button
+        onClick={() => login()}
+        className="btn-nb bg-nb-orange text-nb-black text-sm flex items-center gap-2"
+        title={`Reconnect as ${googleUser.name}`}
+      >
+        <img
+          src={googleUser.picture}
+          alt={googleUser.name}
+          className="w-6 h-6 rounded-full"
+          referrerPolicy="no-referrer"
+        />
+        Reconnect
+      </button>
     );
   }
 
