@@ -60,6 +60,19 @@ const PlayPage: React.FC = () => {
   const [showJoinGameModal, setShowJoinGameModal] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedDataRef = useRef<string>('');
+  const isLoadingFromSpreadsheetRef = useRef(false);
+  const lastLocalChangeTimeRef = useRef<number>(0);
+  const isPollingSuspendedRef = useRef(false);
+
+  // Suspend polling for a short time after local changes to avoid race conditions
+  const suspendPolling = useCallback(() => {
+    lastLocalChangeTimeRef.current = Date.now();
+    isPollingSuspendedRef.current = true;
+    // Resume polling after 3 seconds
+    setTimeout(() => {
+      isPollingSuspendedRef.current = false;
+    }, 3000);
+  }, []);
 
   const activeSession = useMemo(() => {
     return sessions.find(s => s.id === activeSessionId);
@@ -80,9 +93,26 @@ const PlayPage: React.FC = () => {
     return activePlayerSessions.reduce((sum, ps) => sum + (ps.cashOut || 0), 0);
   }, [activePlayerSessions]);
 
+  // Helper to create a normalized hash for comparison
+  const createNormalizedHash = useCallback((playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[]) => {
+    const normalized = playerData
+      .map(p => ({
+        name: p.playerName.toLowerCase().trim(),
+        buyIn: Math.round(p.totalBuyIn * 100), // Use cents to avoid float issues
+        cashOut: p.cashOut !== undefined ? Math.round(p.cashOut * 100) : null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return JSON.stringify(normalized);
+  }, []);
+
   // Sync in-progress game state to spreadsheet
   const syncInProgressToSheet = useCallback(async () => {
     if (!isGoogleConnected || !importedSpreadsheetId || !activeSession || !activeSessionId) {
+      return;
+    }
+
+    // Don't sync while loading from spreadsheet (would overwrite with incomplete data)
+    if (isLoadingFromSpreadsheetRef.current) {
       return;
     }
 
@@ -97,8 +127,13 @@ const PlayPage: React.FC = () => {
       };
     });
 
+    // Don't sync empty player data (would wipe the spreadsheet)
+    if (playerData.length === 0) {
+      return;
+    }
+
     // Check if data has actually changed to avoid unnecessary API calls
-    const dataHash = JSON.stringify(playerData);
+    const dataHash = createNormalizedHash(playerData);
     if (dataHash === lastSyncedDataRef.current) {
       return;
     }
@@ -117,14 +152,103 @@ const PlayPage: React.FC = () => {
     } finally {
       setIsSyncingInProgress(false);
     }
-  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players]);
+  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players, createNormalizedHash]);
+
+  // Load game from spreadsheet's "In Progress" sheet (source of truth)
+  const loadGameFromSpreadsheet = useCallback(async (remoteGame: {
+    date: Date;
+    players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
+  }) => {
+    // Set flag to prevent syncing while we're loading
+    isLoadingFromSpreadsheetRef.current = true;
+
+    // Create a session with the remote game's date
+    dispatch(createSession({
+      date: remoteGame.date.toISOString().split('T')[0],
+      gameType: 'cash',
+    }));
+
+    // Wait for session to be created, then add players
+    setTimeout(() => {
+      const state = (window as any).__REDUX_STORE__?.getState?.();
+      if (!state) {
+        isLoadingFromSpreadsheetRef.current = false;
+        return;
+      }
+
+      const newSessionId = state.sessions.activeSessionId;
+      if (!newSessionId) {
+        isLoadingFromSpreadsheetRef.current = false;
+        return;
+      }
+
+      let pendingCashOuts = 0;
+
+      for (const remotePlayer of remoteGame.players) {
+        // Find or create the player
+        let localPlayer = state.players.players.find(
+          (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+        );
+
+        if (!localPlayer) {
+          dispatch(addPlayer({ name: remotePlayer.playerName }));
+          const updatedState = (window as any).__REDUX_STORE__?.getState?.();
+          if (updatedState) {
+            localPlayer = updatedState.players.players.find(
+              (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+            );
+          }
+        }
+
+        if (localPlayer) {
+          dispatch(addPlayerToSession({
+            sessionId: newSessionId,
+            playerId: localPlayer.id,
+            buyInAmount: remotePlayer.totalBuyIn,
+          }));
+
+          // Set cash-out if it exists
+          if (remotePlayer.cashOut !== undefined) {
+            pendingCashOuts++;
+            setTimeout(() => {
+              const latestState = (window as any).__REDUX_STORE__?.getState?.();
+              if (latestState) {
+                const ps = latestState.sessions.playerSessions.find(
+                  (ps: any) => ps.sessionId === newSessionId && ps.playerId === localPlayer.id
+                );
+                if (ps) {
+                  dispatch(setCashOut({
+                    playerSessionId: ps.id,
+                    amount: remotePlayer.cashOut!,
+                  }));
+                }
+              }
+              pendingCashOuts--;
+              // Clear loading flag when all cash-outs are done
+              if (pendingCashOuts === 0) {
+                isLoadingFromSpreadsheetRef.current = false;
+              }
+            }, 50);
+          }
+        }
+      }
+
+      // Update the hash to prevent immediate re-sync
+      lastSyncedDataRef.current = JSON.stringify(remoteGame.players.sort((a, b) => a.playerName.localeCompare(b.playerName)));
+
+      // Clear loading flag if there were no cash-outs to wait for
+      if (pendingCashOuts === 0) {
+        isLoadingFromSpreadsheetRef.current = false;
+      }
+    }, 100);
+  }, [dispatch]);
 
   // Check for in-progress game from spreadsheet on mount
   const checkForRemoteInProgressGame = useCallback(async () => {
     if (!isGoogleConnected || !importedSpreadsheetId || activeSessionId) {
       return;
     }
-
+    
     try {
       const remoteGame = await googleDriveService.getInProgressGame(importedSpreadsheetId);
       if (remoteGame && remoteGame.players.length > 0) {
@@ -136,17 +260,27 @@ const PlayPage: React.FC = () => {
     }
   }, [isGoogleConnected, importedSpreadsheetId, activeSessionId]);
 
-  // Poll for updates from other collaborators
+  // Poll for updates from other collaborators - spreadsheet is source of truth
   const pollForUpdates = useCallback(async () => {
-    if (!isGoogleConnected || !importedSpreadsheetId || !activeSession) {
+    // Skip polling if suspended (recent local change) or currently syncing
+    if (isPollingSuspendedRef.current || isSyncingInProgress) {
+      return;
+    }
+
+    if (!isGoogleConnected || !importedSpreadsheetId || !activeSession || !activeSessionId) {
       return;
     }
 
     try {
       const remoteGame = await googleDriveService.getInProgressGame(importedSpreadsheetId);
-      if (!remoteGame) return;
 
-      // Compare remote data with local data and update if different
+      // If no remote game exists but we have a local session, the game was ended elsewhere
+      if (!remoteGame) {
+        console.log('No in-progress game found in spreadsheet - game may have been ended elsewhere');
+        return;
+      }
+
+      // Build current local state for comparison
       const localPlayerData = activePlayerSessions.map(ps => {
         const player = players.find(p => p.id === ps.playerId);
         const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
@@ -157,68 +291,103 @@ const PlayPage: React.FC = () => {
         };
       });
 
-      const localHash = JSON.stringify(localPlayerData.sort((a, b) => a.playerName.localeCompare(b.playerName)));
-      const remoteHash = JSON.stringify(remoteGame.players.sort((a, b) => a.playerName.localeCompare(b.playerName)));
+      // Use normalized hash for comparison
+      const localHash = createNormalizedHash(localPlayerData);
+      const remoteHash = createNormalizedHash(remoteGame.players);
 
-      if (localHash !== remoteHash) {
-        // Remote has different data - update local state
-        console.log('Detected remote changes, updating local state...');
+      // Skip if nothing changed
+      if (localHash === remoteHash) {
+        // Update the lastSyncedDataRef to match
+        lastSyncedDataRef.current = localHash;
+        return;
+      }
 
-        // For each remote player, find or create local player and update their session
-        for (const remotePlayer of remoteGame.players) {
-          let localPlayer = players.find(p => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase());
+      console.log('Detected remote changes, updating local state from spreadsheet...');
 
-          // If player doesn't exist locally, add them
-          if (!localPlayer) {
-            dispatch(addPlayer({ name: remotePlayer.playerName }));
-            // Get the newly added player from the store
-            const state = (window as any).__REDUX_STORE__?.getState?.();
-            if (state) {
-              localPlayer = state.players.players.find(
-                (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
-              );
-            }
-          }
+      // Update/add players from remote
+      for (const remotePlayer of remoteGame.players) {
+        let localPlayer = players.find(p => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase());
 
-          if (!localPlayer) continue;
-
-          // Check if player is already in the session
-          const existingPs = activePlayerSessions.find(ps => ps.playerId === localPlayer!.id);
-
-          if (!existingPs) {
-            // Add player to session with buy-in amount from remote
-            dispatch(addPlayerToSession({
-              sessionId: activeSessionId!,
-              playerId: localPlayer.id,
-              buyInAmount: remotePlayer.totalBuyIn,
-            }));
-          } else {
-            // Update cash-out if different
-            if (remotePlayer.cashOut !== undefined && existingPs.cashOut !== remotePlayer.cashOut) {
-              dispatch(setCashOut({
-                playerSessionId: existingPs.id,
-                amount: remotePlayer.cashOut,
-              }));
-            }
+        // Add player if they don't exist locally
+        if (!localPlayer) {
+          dispatch(addPlayer({ name: remotePlayer.playerName }));
+          const state = (window as any).__REDUX_STORE__?.getState?.();
+          if (state) {
+            localPlayer = state.players.players.find(
+              (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
+            );
           }
         }
 
-        // Update the last synced data ref to avoid re-syncing
-        lastSyncedDataRef.current = remoteHash;
+        if (!localPlayer) continue;
+
+        const existingPs = activePlayerSessions.find(ps => ps.playerId === localPlayer!.id);
+
+        if (!existingPs) {
+          // Add player to session
+          dispatch(addPlayerToSession({
+            sessionId: activeSessionId,
+            playerId: localPlayer.id,
+            buyInAmount: remotePlayer.totalBuyIn,
+          }));
+
+          // Set cash-out if exists
+          if (remotePlayer.cashOut !== undefined) {
+            setTimeout(() => {
+              const state = (window as any).__REDUX_STORE__?.getState?.();
+              if (state) {
+                const ps = state.sessions.playerSessions.find(
+                  (ps: any) => ps.sessionId === activeSessionId && ps.playerId === localPlayer!.id
+                );
+                if (ps) {
+                  dispatch(setCashOut({ playerSessionId: ps.id, amount: remotePlayer.cashOut! }));
+                }
+              }
+            }, 50);
+          }
+        } else {
+          // Update cash-out if different (spreadsheet is source of truth)
+          const remoteCashOut = remotePlayer.cashOut;
+          if (remoteCashOut !== undefined && existingPs.cashOut !== remoteCashOut) {
+            dispatch(setCashOut({ playerSessionId: existingPs.id, amount: remoteCashOut }));
+          }
+        }
       }
+
+      // Remove players that are no longer in remote (spreadsheet is source of truth)
+      // BUT only if we're not currently syncing (to avoid race condition where
+      // a newly added player gets removed before the sync completes)
+      if (!isSyncingInProgress) {
+        const remotePlayerNames = new Set(remoteGame.players.map(p => p.playerName.toLowerCase()));
+        for (const ps of activePlayerSessions) {
+          const player = players.find(p => p.id === ps.playerId);
+          if (player && !remotePlayerNames.has(player.name.toLowerCase())) {
+            // Player was removed from spreadsheet
+            dispatch(removePlayerFromSession(ps.id));
+          }
+        }
+      }
+
+      lastSyncedDataRef.current = remoteHash;
     } catch (error) {
       console.error('Error polling for updates:', error);
     }
-  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players, dispatch]);
+  }, [isGoogleConnected, importedSpreadsheetId, activeSession, activeSessionId, activePlayerSessions, players, dispatch, isSyncingInProgress, createNormalizedHash]);
 
   // Start/stop polling when active session changes
   useEffect(() => {
     if (activeSession && isGoogleConnected && importedSpreadsheetId) {
-      // Start polling
+      // Start polling for updates from other devices
       pollIntervalRef.current = setInterval(pollForUpdates, POLL_INTERVAL);
 
-      // Initial sync when session becomes active
-      syncInProgressToSheet();
+      // Do an immediate poll to get any updates, then sync local state
+      // The sync has guards to prevent overwriting with empty/loading data
+      pollForUpdates().then(() => {
+        // Only sync after polling, and only if not loading from spreadsheet
+        if (!isLoadingFromSpreadsheetRef.current) {
+          syncInProgressToSheet();
+        }
+      });
 
       return () => {
         if (pollIntervalRef.current) {
@@ -257,7 +426,18 @@ const PlayPage: React.FC = () => {
 
   const watchPlayerId = watchPlayer('playerId');
 
-  const onCreateSession = (data: CreateSessionForm) => {
+  const onCreateSession = async (data: CreateSessionForm) => {
+    // Clear the "In Progress" sheet when starting a NEW game
+    // This ensures we don't have stale data from a previous session
+    if (isGoogleConnected && importedSpreadsheetId) {
+      try {
+        await googleDriveService.clearInProgressSheet(importedSpreadsheetId);
+        console.log('Cleared in-progress sheet for new game');
+      } catch (error) {
+        console.error('Error clearing in-progress sheet:', error);
+      }
+    }
+
     dispatch(createSession(data));
     dispatch(markUnsyncedChanges());
     resetSession();
@@ -290,6 +470,7 @@ const PlayPage: React.FC = () => {
               })
             );
             // Sync to spreadsheet after adding player
+            suspendPolling();
             setTimeout(() => syncInProgressToSheet(), 100);
           }
         }
@@ -303,6 +484,7 @@ const PlayPage: React.FC = () => {
         })
       );
       // Sync to spreadsheet after adding player
+      suspendPolling();
       setTimeout(() => syncInProgressToSheet(), 100);
     }
 
@@ -317,6 +499,7 @@ const PlayPage: React.FC = () => {
       dispatch(addBuyIn({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
       // Sync to spreadsheet after adding buy-in
+      suspendPolling();
       setTimeout(() => syncInProgressToSheet(), 100);
     }
     setBuyInAmount('');
@@ -329,6 +512,7 @@ const PlayPage: React.FC = () => {
       dispatch(setCashOut({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
       // Sync to spreadsheet after cash out
+      suspendPolling();
       setTimeout(() => syncInProgressToSheet(), 100);
     }
     setCashOutAmount('');
@@ -373,13 +557,9 @@ const PlayPage: React.FC = () => {
         // Get session date
         const sessionDate = new Date(activeSession.date);
 
-        // First, delete the in-progress column (if it exists)
-        try {
-          await googleDriveService.deleteInProgressColumn(importedSpreadsheetId, sessionDate);
-          console.log('Deleted in-progress column');
-        } catch (deleteError) {
-          console.error('Error deleting IP column (continuing anyway):', deleteError);
-        }
+        // Note: We do NOT clear the "In Progress" sheet here.
+        // It stays populated until the user starts a NEW game,
+        // allowing them to resume an accidentally ended session.
 
         // Build player results for the spreadsheet
         const playerResults = activePlayerSessions.map(ps => {
@@ -810,6 +990,7 @@ const PlayPage: React.FC = () => {
                             dispatch(removePlayerFromSession(ps.id));
                             dispatch(markUnsyncedChanges());
                             // Sync to spreadsheet after removing player
+                            suspendPolling();
                             setTimeout(() => syncInProgressToSheet(), 100);
                           }}
                           className="text-nb-red hover:underline text-sm"
@@ -994,7 +1175,7 @@ const PlayPage: React.FC = () => {
       {showJoinGameModal && remoteInProgressGame && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="card-nb w-full max-w-md mx-4">
-            <h3 className="mb-4">Join In-Progress Game?</h3>
+            <h3 className="mb-4">In-Progress Game Found</h3>
             <p className="text-theme-secondary mb-4">
               There's an in-progress game from {remoteInProgressGame.date.toLocaleDateString()} with {remoteInProgressGame.players.length} player{remoteInProgressGame.players.length !== 1 ? 's' : ''}.
             </p>
@@ -1009,71 +1190,13 @@ const PlayPage: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  // Create a session with the remote game's date and add all players
-                  dispatch(createSession({
-                    date: remoteInProgressGame.date.toISOString().split('T')[0],
-                    gameType: 'cash',
-                  }));
-
-                  // Wait for session to be created, then add players
-                  setTimeout(() => {
-                    const state = (window as any).__REDUX_STORE__?.getState?.();
-                    if (state) {
-                      const newSessionId = state.sessions.activeSessionId;
-                      if (newSessionId) {
-                        for (const remotePlayer of remoteInProgressGame.players) {
-                          // Find or create the player
-                          let localPlayer = state.players.players.find(
-                            (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
-                          );
-
-                          if (!localPlayer) {
-                            dispatch(addPlayer({ name: remotePlayer.playerName }));
-                            // Re-fetch state to get the new player
-                            const updatedState = (window as any).__REDUX_STORE__?.getState?.();
-                            if (updatedState) {
-                              localPlayer = updatedState.players.players.find(
-                                (p: any) => p.name.toLowerCase() === remotePlayer.playerName.toLowerCase()
-                              );
-                            }
-                          }
-
-                          if (localPlayer) {
-                            dispatch(addPlayerToSession({
-                              sessionId: newSessionId,
-                              playerId: localPlayer.id,
-                              buyInAmount: remotePlayer.totalBuyIn,
-                            }));
-
-                            // Set cash-out if it exists
-                            if (remotePlayer.cashOut !== undefined) {
-                              setTimeout(() => {
-                                const latestState = (window as any).__REDUX_STORE__?.getState?.();
-                                if (latestState) {
-                                  const ps = latestState.sessions.playerSessions.find(
-                                    (ps: any) => ps.sessionId === newSessionId && ps.playerId === localPlayer.id
-                                  );
-                                  if (ps) {
-                                    dispatch(setCashOut({
-                                      playerSessionId: ps.id,
-                                      amount: remotePlayer.cashOut!,
-                                    }));
-                                  }
-                                }
-                              }, 50);
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }, 100);
-
+                  loadGameFromSpreadsheet(remoteInProgressGame);
                   setShowJoinGameModal(false);
                   setRemoteInProgressGame(null);
                 }}
                 className="btn-nb-success"
               >
-                Join Game
+                Continue Game
               </button>
               <button
                 onClick={() => {
@@ -1082,7 +1205,7 @@ const PlayPage: React.FC = () => {
                 }}
                 className="btn-nb"
               >
-                Start Fresh
+                Dismiss
               </button>
             </div>
           </div>

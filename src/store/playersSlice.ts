@@ -18,6 +18,15 @@ const playersSlice = createSlice({
       state.players = action.payload;
     },
     addPlayer: (state, action: PayloadAction<{ name: string }>) => {
+      // Check if player with this name already exists (case-insensitive)
+      const existingPlayer = state.players.find(
+        p => p.name.toLowerCase() === action.payload.name.toLowerCase()
+      );
+      if (existingPlayer) {
+        // Player already exists, don't add duplicate
+        return;
+      }
+
       const now = new Date().toISOString();
       const newPlayer: Player = {
         id: uuidv4(),

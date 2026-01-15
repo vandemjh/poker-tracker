@@ -271,24 +271,15 @@ class GoogleDriveService {
     }
   }
 
-  // Fetch spreadsheet data from Google Sheets
+  // Fetch spreadsheet data from Google Sheets (from Totals sheet)
   async getSpreadsheetData(spreadsheetId: string): Promise<string[][]> {
     try {
-      // First, get spreadsheet metadata to find the first sheet name
-      const metaResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`
-      );
-      const metadata = await metaResponse.json();
+      // Get the totals sheet name
+      const sheetName = await this.getTotalsSheetName(spreadsheetId);
 
-      if (!metadata.sheets || metadata.sheets.length === 0) {
-        throw new Error('Spreadsheet has no sheets');
-      }
-
-      const firstSheetName = metadata.sheets[0].properties.title;
-
-      // Fetch all data from the first sheet
+      // Fetch all data from the totals sheet
       const response = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`
       );
 
       const data = await response.json();
@@ -299,7 +290,7 @@ class GoogleDriveService {
     }
   }
 
-  // Append or update a session column in the spreadsheet
+  // Append or update a session column in the Totals sheet
   // If a column with the same date exists, it updates that column
   // Otherwise, it appends a new column to the right
   async appendSessionColumn(
@@ -308,21 +299,12 @@ class GoogleDriveService {
     playerResults: { playerName: string; netResult: number }[]
   ): Promise<void> {
     try {
-      // Get spreadsheet metadata
-      const metaResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
-      );
-      const metadata = await metaResponse.json();
-
-      if (!metadata.sheets || metadata.sheets.length === 0) {
-        throw new Error('Spreadsheet has no sheets');
-      }
-
-      const firstSheetName = metadata.sheets[0].properties.title;
+      // Get the totals sheet name
+      const sheetName = await this.getTotalsSheetName(spreadsheetId);
 
       // Get existing data to find the rightmost column and player rows
       const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`
       );
       const existingData = await dataResponse.json();
       const rows: (string | number)[][] = existingData.values || [];
@@ -410,7 +392,7 @@ class GoogleDriveService {
 
       // Convert column index to letter (A, B, C, ... AA, AB, etc.)
       const colLetter = this.columnIndexToLetter(targetColIndex);
-      const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
+      const range = `${sheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
 
       // Write the column (either new or updating existing)
       await this.makeRequest(
@@ -431,7 +413,7 @@ class GoogleDriveService {
       // If there are new players, we need to add their names in column A
       if (newPlayers.length > 0) {
         const startRow = rows.length + 1;
-        const namesRange = `${firstSheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
+        const namesRange = `${sheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
 
         await this.makeRequest(
           `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(namesRange)}?valueInputOption=USER_ENTERED`,
@@ -485,150 +467,134 @@ class GoogleDriveService {
     return letter;
   }
 
-  // Update or create an "In Progress" session column
-  // Format: "MM/DD/YYYY IP" for in-progress, with values as "buyIn|cashOut" or just "buyIn"
+  // Sheet names
+  private readonly TOTALS_SHEET_NAME = 'Totals';
+  private readonly IN_PROGRESS_SHEET_NAME = 'In Progress';
+
+  // Helper to find or create a sheet by name
+  private async ensureSheetExists(
+    spreadsheetId: string,
+    sheetName: string
+  ): Promise<{ sheetId: number; existed: boolean }> {
+    // Get spreadsheet metadata
+    const metaResponse = await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+    );
+    const metadata = await metaResponse.json();
+
+    // Check if sheet already exists
+    const existingSheet = metadata.sheets?.find(
+      (s: any) => s.properties.title === sheetName
+    );
+
+    if (existingSheet) {
+      return { sheetId: existingSheet.properties.sheetId, existed: true };
+    }
+
+    // Create the sheet
+    const createResponse = await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            addSheet: {
+              properties: { title: sheetName }
+            }
+          }]
+        }),
+      }
+    );
+
+    const createResult = await createResponse.json();
+    const newSheetId = createResult.replies[0].addSheet.properties.sheetId;
+
+    return { sheetId: newSheetId, existed: false };
+  }
+
+  // Helper to get the "Totals" sheet name (first sheet or "Totals" if it exists)
+  private async getTotalsSheetName(spreadsheetId: string): Promise<string> {
+    const metaResponse = await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+    );
+    const metadata = await metaResponse.json();
+
+    // Look for a sheet named "Totals"
+    const totalsSheet = metadata.sheets?.find(
+      (s: any) => s.properties.title === this.TOTALS_SHEET_NAME
+    );
+
+    if (totalsSheet) {
+      return this.TOTALS_SHEET_NAME;
+    }
+
+    // Otherwise return the first sheet that's not "In Progress"
+    const firstSheet = metadata.sheets?.find(
+      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME
+    );
+
+    return firstSheet?.properties.title || metadata.sheets[0].properties.title;
+  }
+
+  // Update or create in-progress game data in the "In Progress" sheet
+  // Format:
+  // Row 1: Game date (MM/DD/YYYY)
+  // Row 2: Headers (Player, Buy-in, Cash-out)
+  // Row 3+: Player data
   async updateInProgressSession(
     spreadsheetId: string,
     sessionDate: Date,
     playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[]
   ): Promise<void> {
     try {
-      // Get spreadsheet metadata
-      const metaResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
-      );
-      const metadata = await metaResponse.json();
+      // Ensure the "In Progress" sheet exists
+      await this.ensureSheetExists(spreadsheetId, this.IN_PROGRESS_SHEET_NAME);
 
-      if (!metadata.sheets || metadata.sheets.length === 0) {
-        throw new Error('Spreadsheet has no sheets');
-      }
-
-      const firstSheetName = metadata.sheets[0].properties.title;
-
-      // Get existing data
-      const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
-      );
-      const existingData = await dataResponse.json();
-      const rows: (string | number)[][] = existingData.values || [];
-
-      if (rows.length === 0) {
-        throw new Error('Spreadsheet is empty');
-      }
-
-      // Format dates
+      // Format the date
       const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
-      const inProgressHeader = `${dateStr} IP`;
 
-      // Find existing column for this in-progress session
-      let existingColIndex = -1;
-      const headerRow = rows[0] || [];
+      // Build the data to write
+      const rows: (string | number)[][] = [
+        [dateStr], // Row 1: Date
+        ['Player', 'Buy-in', 'Cash-out'], // Row 2: Headers
+      ];
 
-      for (let i = 0; i < headerRow.length; i++) {
-        const header = String(headerRow[i] || '').trim();
-        if (header === inProgressHeader) {
-          existingColIndex = i;
-          break;
-        }
+      // Add player data
+      for (const player of playerData) {
+        rows.push([
+          player.playerName,
+          player.totalBuyIn,
+          player.cashOut !== undefined ? player.cashOut : '',
+        ]);
       }
 
-      // If no existing column, find the rightmost column
-      let targetColIndex = existingColIndex;
-      if (targetColIndex === -1) {
-        let maxCol = 0;
-        for (const row of rows) {
-          if (row.length > maxCol) {
-            maxCol = row.length;
-          }
+      // Clear and write to the sheet
+      const range = `'${this.IN_PROGRESS_SHEET_NAME}'!A1:C${rows.length}`;
+
+      // First clear the sheet
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C:clear`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
         }
-        targetColIndex = maxCol;
-      }
-
-      // Create a map of player names to row indices (case-insensitive)
-      const playerRowMap = new Map<string, number>();
-      for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
-        if (playerName) {
-          playerRowMap.set(playerName, i);
-        }
-      }
-
-      // Build column values - format: "buyIn|cashOut" or just "buyIn" if no cashout
-      const columnValues: (string | number)[] = [inProgressHeader];
-
-      // Fill in player data
-      for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
-        const result = playerData.find(
-          pr => pr.playerName.toLowerCase() === playerName
-        );
-
-        if (result) {
-          // Format: "buyIn|cashOut" or just "buyIn"
-          if (result.cashOut !== undefined) {
-            columnValues.push(`${result.totalBuyIn}|${result.cashOut}`);
-          } else {
-            columnValues.push(`${result.totalBuyIn}|`);
-          }
-        } else {
-          columnValues.push('');
-        }
-      }
-
-      // Check for new players not in the spreadsheet
-      const existingPlayers = new Set(playerRowMap.keys());
-      const newPlayers = playerData.filter(
-        pr => !existingPlayers.has(pr.playerName.toLowerCase())
       );
 
-      // Add new players to the column
-      for (const newPlayer of newPlayers) {
-        if (newPlayer.cashOut !== undefined) {
-          columnValues.push(`${newPlayer.totalBuyIn}|${newPlayer.cashOut}`);
-        } else {
-          columnValues.push(`${newPlayer.totalBuyIn}|`);
-        }
-      }
-
-      // Write the column
-      const colLetter = this.columnIndexToLetter(targetColIndex);
-      const range = `${firstSheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
-
+      // Then write the new data
       await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
         {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             range,
-            majorDimension: 'COLUMNS',
-            values: [columnValues],
+            majorDimension: 'ROWS',
+            values: rows,
           }),
         }
       );
-
-      // If there are new players, add their names in column A
-      if (newPlayers.length > 0) {
-        const startRow = rows.length + 1;
-        const namesRange = `${firstSheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
-
-        await this.makeRequest(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(namesRange)}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              range: namesRange,
-              majorDimension: 'ROWS',
-              values: newPlayers.map(p => [p.playerName]),
-            }),
-          }
-        );
-      }
 
       console.log('Successfully updated in-progress session in spreadsheet');
     } catch (error) {
@@ -637,82 +603,41 @@ class GoogleDriveService {
     }
   }
 
-  // Delete the "In Progress" column for a given date (called when game ends)
-  async deleteInProgressColumn(
-    spreadsheetId: string,
-    sessionDate: Date
-  ): Promise<void> {
+  // Clear the "In Progress" sheet (called when game ends)
+  async clearInProgressSheet(spreadsheetId: string): Promise<void> {
     try {
-      // Get spreadsheet metadata
+      // Check if the sheet exists
       const metaResponse = await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
       );
       const metadata = await metaResponse.json();
 
-      if (!metadata.sheets || metadata.sheets.length === 0) {
-        return; // Nothing to delete
-      }
-
-      const sheetId = metadata.sheets[0].properties.sheetId;
-      const firstSheetName = metadata.sheets[0].properties.title;
-
-      // Get existing data
-      const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      const ipSheet = metadata.sheets?.find(
+        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME
       );
-      const existingData = await dataResponse.json();
-      const rows: (string | number)[][] = existingData.values || [];
 
-      if (rows.length === 0) return;
-
-      // Format date and find IP column
-      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
-      const inProgressHeader = `${dateStr} IP`;
-
-      const headerRow = rows[0] || [];
-      let ipColIndex = -1;
-
-      for (let i = 0; i < headerRow.length; i++) {
-        const header = String(headerRow[i] || '').trim();
-        if (header === inProgressHeader) {
-          ipColIndex = i;
-          break;
-        }
+      if (!ipSheet) {
+        return; // Sheet doesn't exist, nothing to clear
       }
 
-      if (ipColIndex === -1) return; // No IP column found
-
-      // Delete the column using batchUpdate
+      // Clear the sheet
       await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:Z:clear`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            requests: [{
-              deleteDimension: {
-                range: {
-                  sheetId: sheetId,
-                  dimension: 'COLUMNS',
-                  startIndex: ipColIndex,
-                  endIndex: ipColIndex + 1,
-                },
-              },
-            }],
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
         }
       );
 
-      console.log('Deleted in-progress column');
+      console.log('Cleared in-progress sheet');
     } catch (error) {
-      console.error('Error deleting in-progress column:', error);
+      console.error('Error clearing in-progress sheet:', error);
       // Don't throw - this is cleanup, not critical
     }
   }
 
-  // Get in-progress game data from spreadsheet
+  // Get in-progress game data from the "In Progress" sheet
   async getInProgressGame(
     spreadsheetId: string
   ): Promise<{
@@ -720,71 +645,58 @@ class GoogleDriveService {
     players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
   } | null> {
     try {
-      // Get spreadsheet metadata
+      // Check if the sheet exists
       const metaResponse = await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
       );
       const metadata = await metaResponse.json();
 
-      if (!metadata.sheets || metadata.sheets.length === 0) {
-        return null;
-      }
-
-      const firstSheetName = metadata.sheets[0].properties.title;
-
-      // Get existing data
-      const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+      const ipSheet = metadata.sheets?.find(
+        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME
       );
-      const existingData = await dataResponse.json();
-      const rows: (string | number)[][] = existingData.values || [];
 
-      if (rows.length === 0) return null;
-
-      // Find IP column
-      const headerRow = rows[0] || [];
-      let ipColIndex = -1;
-      let ipDateStr = '';
-
-      for (let i = 0; i < headerRow.length; i++) {
-        const header = String(headerRow[i] || '').trim();
-        if (header.endsWith(' IP')) {
-          ipColIndex = i;
-          ipDateStr = header.replace(' IP', '');
-          break;
-        }
+      if (!ipSheet) {
+        return null; // Sheet doesn't exist
       }
 
-      if (ipColIndex === -1) return null;
+      // Get the data
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C?valueRenderOption=UNFORMATTED_VALUE`
+      );
+      const data = await dataResponse.json();
+      const rows: (string | number)[][] = data.values || [];
 
-      // Parse the date
-      const dateParts = ipDateStr.split('/');
+      if (rows.length < 3) {
+        return null; // Not enough data (need date row, header row, at least one player)
+      }
+
+      // Parse the date from row 1
+      const dateStr = String(rows[0]?.[0] || '').trim();
+      if (!dateStr) return null;
+
+      const dateParts = dateStr.split('/');
       if (dateParts.length !== 3) return null;
+
       const date = new Date(
         parseInt(dateParts[2], 10),
         parseInt(dateParts[0], 10) - 1,
         parseInt(dateParts[1], 10)
       );
 
-      // Parse player data
+      // Parse player data starting from row 3 (index 2)
       const players: { playerName: string; totalBuyIn: number; cashOut?: number }[] = [];
 
-      for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '').trim();
-        const cellValue = rows[i]?.[ipColIndex];
+      for (let i = 2; i < rows.length; i++) {
+        const row = rows[i];
+        const playerName = String(row?.[0] || '').trim();
+        const totalBuyIn = parseFloat(String(row?.[1] || '0')) || 0;
+        const cashOutValue = row?.[2];
+        const cashOut = cashOutValue !== undefined && cashOutValue !== ''
+          ? parseFloat(String(cashOutValue))
+          : undefined;
 
-        if (playerName && cellValue !== undefined && cellValue !== '') {
-          const valueStr = String(cellValue);
-          const parts = valueStr.split('|');
-
-          if (parts.length >= 1) {
-            const totalBuyIn = parseFloat(parts[0]) || 0;
-            const cashOut = parts[1] ? parseFloat(parts[1]) : undefined;
-
-            if (totalBuyIn > 0) {
-              players.push({ playerName, totalBuyIn, cashOut });
-            }
-          }
+        if (playerName && totalBuyIn > 0) {
+          players.push({ playerName, totalBuyIn, cashOut });
         }
       }
 

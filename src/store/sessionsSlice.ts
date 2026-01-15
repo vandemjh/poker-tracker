@@ -55,6 +55,15 @@ const sessionsSlice = createSlice({
       playerId: string;
       buyInAmount: number;
     }>) => {
+      // Check if player is already in this session
+      const existingPlayerSession = state.playerSessions.find(
+        ps => ps.sessionId === action.payload.sessionId && ps.playerId === action.payload.playerId
+      );
+      if (existingPlayerSession) {
+        // Player already in session, don't add duplicate
+        return;
+      }
+
       const now = new Date().toISOString();
       const buyIn: BuyIn = {
         id: uuidv4(),
@@ -85,6 +94,12 @@ const sessionsSlice = createSlice({
           timestamp: new Date().toISOString(),
         };
         playerSession.buyIns.push(buyIn);
+
+        // Recalculate netResult if player has already cashed out
+        if (playerSession.cashOut !== undefined) {
+          const totalBuyIns = playerSession.buyIns.reduce((sum, b) => sum + b.amount, 0);
+          playerSession.netResult = playerSession.cashOut - totalBuyIns;
+        }
       }
     },
     setCashOut: (state, action: PayloadAction<{
