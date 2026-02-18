@@ -26,6 +26,9 @@ const GoogleAuthButton: React.FC = () => {
   const hasInitialized = useRef(false);
   const autoReconnectAttempted = useRef(false);
 
+  // Promise resolver for mid-session re-auth
+  const reauthResolverRef = useRef<((success: boolean) => void) | null>(null);
+
   // Helper function to sync from spreadsheet
   const syncFromSpreadsheet = async (spreadsheetId: string, existingPlayers: typeof players = []) => {
     try {
@@ -54,7 +57,7 @@ const GoogleAuthButton: React.FC = () => {
   };
 
   // Handle successful login
-  const handleLoginSuccess = useCallback(async (accessToken: string) => {
+  const handleLoginSuccess = useCallback(async (accessToken: string, isReauth: boolean = false) => {
     try {
       dispatch(setLoading(true));
       googleDriveService.setAccessToken(accessToken);
@@ -70,11 +73,26 @@ const GoogleAuthButton: React.FC = () => {
       const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
       if (spreadsheetId) {
         dispatch(setImportedSpreadsheetId(spreadsheetId));
-        await syncFromSpreadsheet(spreadsheetId, players);
+        // Only sync from spreadsheet on initial login, not re-auth
+        // (re-auth happens mid-session, we don't want to overwrite local state)
+        if (!isReauth) {
+          await syncFromSpreadsheet(spreadsheetId, players);
+        }
+      }
+
+      // Resolve re-auth promise if pending
+      if (reauthResolverRef.current) {
+        reauthResolverRef.current(true);
+        reauthResolverRef.current = null;
       }
     } catch (error) {
       console.error('Error connecting to Google Drive:', error);
       dispatch(setError('Failed to connect to Google Drive'));
+      // Resolve re-auth promise with failure
+      if (reauthResolverRef.current) {
+        reauthResolverRef.current(false);
+        reauthResolverRef.current = null;
+      }
     } finally {
       dispatch(setLoading(false));
     }
@@ -99,12 +117,17 @@ const GoogleAuthButton: React.FC = () => {
   // Login with hint (for reconnection - pre-selects the user's account)
   const loginWithHint = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
-      await handleLoginSuccess(tokenResponse.access_token);
+      await handleLoginSuccess(tokenResponse.access_token, true);
     },
     onError: (error) => {
       console.error('Google re-login error:', error);
       setIsAutoReconnecting(false);
       setNeedsReauth(true);
+      // Resolve re-auth promise with failure
+      if (reauthResolverRef.current) {
+        reauthResolverRef.current(false);
+        reauthResolverRef.current = null;
+      }
     },
     scope: SCOPES,
     hint: googleUser?.email,
@@ -166,6 +189,31 @@ const GoogleAuthButton: React.FC = () => {
       }, 500);
     }
   }, [needsReauth, googleUser, isAutoReconnecting, loginWithHint]);
+
+  // Register re-auth callback with googleDriveService for mid-session token expiration
+  useEffect(() => {
+    const handleReauthRequired = (): Promise<boolean> => {
+      return new Promise((resolve) => {
+        // Store the resolver to be called when re-auth completes
+        reauthResolverRef.current = resolve;
+
+        // Trigger the login flow with hint (pre-selects user's account)
+        setIsAutoReconnecting(true);
+
+        // Small delay to ensure UI updates before triggering login
+        setTimeout(() => {
+          loginWithHint();
+        }, 100);
+      });
+    };
+
+    googleDriveService.setOnAuthRequired(handleReauthRequired);
+
+    // Cleanup on unmount
+    return () => {
+      googleDriveService.setOnAuthRequired(null);
+    };
+  }, [loginWithHint]);
 
   const handleLogout = () => {
     googleLogout();

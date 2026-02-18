@@ -29,12 +29,26 @@ export interface GoogleUserInfo {
   picture: string;
 }
 
+// Callback type for when re-authentication is needed
+type AuthRequiredCallback = () => Promise<boolean>;
+
 class GoogleDriveService {
   private accessToken: string | null = null;
   private fileId: string | null = null;
+  private onAuthRequiredCallback: AuthRequiredCallback | null = null;
+  private isReauthenticating: boolean = false;
+  private reauthPromise: Promise<boolean> | null = null;
+
+  // Register a callback to be called when re-authentication is needed
+  // The callback should trigger the auth flow and resolve to true if successful
+  setOnAuthRequired(callback: AuthRequiredCallback | null) {
+    this.onAuthRequiredCallback = callback;
+  }
 
   setAccessToken(token: string, persist: boolean = true) {
     this.accessToken = token;
+    this.isReauthenticating = false;
+    this.reauthPromise = null;
     if (persist) {
       localStorage.setItem(STORAGE_KEY_TOKEN, token);
     }
@@ -136,9 +150,34 @@ class GoogleDriveService {
     }
   }
 
+  // Trigger re-authentication and wait for it to complete
+  private async triggerReauth(): Promise<boolean> {
+    // If already re-authenticating, wait for that to complete
+    if (this.isReauthenticating && this.reauthPromise) {
+      return this.reauthPromise;
+    }
+
+    if (!this.onAuthRequiredCallback) {
+      console.warn('No auth required callback registered');
+      return false;
+    }
+
+    this.isReauthenticating = true;
+    this.reauthPromise = this.onAuthRequiredCallback();
+
+    try {
+      const result = await this.reauthPromise;
+      return result;
+    } finally {
+      this.isReauthenticating = false;
+      this.reauthPromise = null;
+    }
+  }
+
   private async makeRequest(
     url: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount: number = 0
   ): Promise<Response> {
     if (!this.accessToken) {
       throw new Error('Not authenticated');
@@ -151,6 +190,21 @@ class GoogleDriveService {
         Authorization: `Bearer ${this.accessToken}`,
       },
     });
+
+    // Handle token expiration (401 Unauthorized)
+    if (response.status === 401 && retryCount < 1) {
+      console.log('Token expired, attempting re-authentication...');
+
+      const reauthSuccess = await this.triggerReauth();
+
+      if (reauthSuccess && this.accessToken) {
+        console.log('Re-authentication successful, retrying request...');
+        // Retry the request with the new token
+        return this.makeRequest(url, options, retryCount + 1);
+      } else {
+        throw new Error('Re-authentication failed. Please sign in again.');
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
