@@ -652,6 +652,20 @@ const PlayPage: React.FC = () => {
     });
   }, [availablePlayers, playerGameCounts]);
 
+  // Sort ALL players by games played (descending)
+  const sortedAllPlayers = useMemo(() => {
+    return [...players].sort((a, b) => {
+      const countA = playerGameCounts.get(a.id) || 0;
+      const countB = playerGameCounts.get(b.id) || 0;
+      return countB - countA;
+    });
+  }, [players, playerGameCounts]);
+
+  // Set of player IDs already in the active session
+  const activePlayerIds = useMemo(() => {
+    return new Set(activePlayerSessions.map(ps => ps.playerId));
+  }, [activePlayerSessions]);
+
   // If no active session, show session creation or list of incomplete sessions
   if (!activeSession) {
     const incompleteSessions = sessions.filter(s => !s.isComplete && !s.isImported);
@@ -821,147 +835,6 @@ const PlayPage: React.FC = () => {
           </div>
         )}
 
-        <div className={`card-nb ${!canStartSession ? 'opacity-50 pointer-events-none' : ''}`}>
-          <h2 className="mb-6">Start New Session</h2>
-          <form onSubmit={handleSessionSubmit(onCreateSession)} className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Date</label>
-                <input type="date" {...registerSession('date')} className="input-nb" required />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowOptionalFields(!showOptionalFields)}
-                className="flex items-center gap-2 text-sm font-semibold text-theme-secondary hover:text-theme transition-colors"
-              >
-                <span className={`transform transition-transform ${showOptionalFields ? 'rotate-90' : ''}`}>▶</span>
-                Optional Details
-              </button>
-
-              {showOptionalFields && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4 border-l-3" style={{ borderColor: 'var(--color-border)' }}>
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">Session Name</label>
-                    <input
-                      {...registerSession('name')}
-                      className="input-nb"
-                      placeholder="e.g., Friday Night Game"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">Stakes</label>
-                    <input
-                      {...registerSession('stakes')}
-                      className="input-nb"
-                      placeholder="e.g., $1/$2"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-semibold mb-1">Location</label>
-                    <input
-                      {...registerSession('location')}
-                      className="input-nb"
-                      placeholder="e.g., John's House"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <button type="submit" className="btn-nb-primary" disabled={!canStartSession}>
-              Start Session
-            </button>
-          </form>
-        </div>
-
-        {incompleteSessions.length > 0 && canStartSession && (
-          <div className="card-nb">
-            <h2 className="mb-4">Resume Session</h2>
-            <div className="space-y-2">
-              {incompleteSessions.map(session => (
-                <button
-                  key={session.id}
-                  onClick={() => dispatch(setActiveSession(session.id))}
-                  className="w-full text-left p-4 border-3 hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
-                  style={{
-                    backgroundColor: 'var(--color-bg-card)',
-                    borderColor: 'var(--color-border)',
-                    boxShadow: '2px 2px 0px 0px var(--color-shadow)',
-                  }}
-                >
-                  <div className="font-semibold">
-                    {session.name || new Date(session.date).toLocaleDateString()}
-                  </div>
-                  <div className="text-sm text-theme-secondary">
-                    {session.stakes && `${session.stakes}`}
-                    {session.stakes && session.location && ' @ '}
-                    {!session.stakes && session.location && '@ '}
-                    {session.location}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Resume accidentally ended game */}
-        {lastCompletedSession && canStartSession && (
-          <div className="card-nb bg-nb-orange bg-opacity-20">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h3 className="font-semibold text-nb-black dark:text-theme">Accidentally ended a game?</h3>
-                <p className="text-sm text-theme-secondary">
-                  Resume "{lastCompletedSession.name || new Date(lastCompletedSession.date).toLocaleDateString()}"
-                  (ended {new Date(lastCompletedSession.updatedAt).toLocaleString()})
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  // First resume the session (this resets cashouts to undefined)
-                  dispatch(resumeCompletedSession(lastCompletedSession.id));
-                  dispatch(markUnsyncedChanges());
-
-                  // Restore saved cash-out amounts from localStorage if available
-                  try {
-                    const savedJson = localStorage.getItem(SAVED_SESSION_KEY);
-                    if (savedJson) {
-                      const savedData: SavedSessionData = JSON.parse(savedJson);
-                      if (savedData.sessionId === lastCompletedSession.id) {
-                        // Get the current state to find playerSession IDs
-                        const state = (window as any).__REDUX_STORE__?.getState?.();
-                        if (state) {
-                          const currentPlayerSessions = state.sessions.playerSessions.filter(
-                            (ps: any) => ps.sessionId === lastCompletedSession.id
-                          );
-
-                          // Restore cash-out amounts for each player
-                          savedData.playerSessions.forEach(saved => {
-                            if (saved.cashOut !== undefined) {
-                              const matchingPs = currentPlayerSessions.find(
-                                (ps: any) => ps.playerId === saved.playerId
-                              );
-                              if (matchingPs) {
-                                dispatch(setCashOut({
-                                  playerSessionId: matchingPs.id,
-                                  amount: saved.cashOut,
-                                }));
-                              }
-                            }
-                          });
-                        }
-                      }
-                    }
-                  } catch (e) {
-                    console.error('Error restoring session data:', e);
-                  }
-                }}
-                className="btn-nb bg-nb-orange text-nb-black whitespace-nowrap"
-              >
-                Resume Game
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -1166,11 +1039,17 @@ const PlayPage: React.FC = () => {
                 <label className="block text-sm font-semibold mb-1">Player</label>
                 <select {...registerPlayer('playerId')} className="select-nb py-2 sm:py-3" required>
                   <option value="">Select a player</option>
-                  {sortedAvailablePlayers.map(p => {
+                  {sortedAllPlayers.map(p => {
                     const gameCount = playerGameCounts.get(p.id) || 0;
+                    const alreadyInSession = activePlayerIds.has(p.id);
                     return (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({gameCount} {gameCount === 1 ? 'game' : 'games'})
+                      <option
+                        key={p.id}
+                        value={p.id}
+                        disabled={alreadyInSession}
+                        style={{ backgroundColor: alreadyInSession ? '#f3f4f6' : 'inherit', color: alreadyInSession ? '#9ca3af' : 'inherit' }}
+                      >
+                        {p.name} ({gameCount} {gameCount === 1 ? 'game' : 'games'}){alreadyInSession ? ' — In session' : ''}
                       </option>
                     );
                   })}
