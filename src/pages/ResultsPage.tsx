@@ -368,8 +368,8 @@ const ResultsPage: React.FC = () => {
           </p>
         )}
         {recentGamesData.length > 0 && (
-          <div className="space-y-2">
-            {recentGamesData.map(({ session, results, winners, losers }) => (
+          <div className="space-y-3">
+            {recentGamesData.map(({ session, results, winners, losers }, index) => (
               <div
                 key={session.id}
                 className="p-3 border-2 transition-colors"
@@ -378,9 +378,8 @@ const ResultsPage: React.FC = () => {
                   backgroundColor: 'var(--color-bg)',
                 }}
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="font-semibold">
+                 <div className="mb-2">
+                    <div className="font-semibold text-lg">
                       {new Date(session.date).toLocaleDateString(undefined, {
                         weekday: 'short',
                         year: 'numeric',
@@ -389,50 +388,49 @@ const ResultsPage: React.FC = () => {
                       })}
                     </div>
                     <div className="text-sm text-theme-secondary">
-                      {results.length} players
-                      {session.stakes && ` • ${session.stakes}`}
-                      {session.location && ` • ${session.location}`}
+                      {session.stakes && <span>{session.stakes} • </span>}
+                      {session.location || ''}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-4 text-sm">
+                  <div>
                     {winners.length > 0 && (
-                      <div>
-                        <span className="text-theme-secondary">Winners: </span>
+                      <div className="mb-2">
+                        <span className="font-semibold">Winners:</span>
                         {winners.slice(0, 3).map((w, i) => (
-                          <span key={w.name + i}>
-                            {i > 0 && ', '}
-                            <span className="status-positive font-semibold">
-                              {w.name} ({formatMoneyWithSign(w.netResult)})
-                            </span>
+                          <span key={w.name + i} className="ml-2">
+                            {i > 0 ? ' • ' : ''}
+                            <span className="status-positive">{w.name}</span>
+                            <span className="text-theme-secondary"> {formatMoneyWithSign(w.netResult)}</span>
                           </span>
                         ))}
                         {winners.length > 3 && (
-                          <span className="text-theme-secondary"> +{winners.length - 3} more</span>
+                          <span className="ml-2 text-theme-secondary"> +{winners.length - 3} more</span>
                         )}
                       </div>
                     )}
                     {losers.length > 0 && (
                       <div>
-                        <span className="text-theme-secondary">Losers: </span>
+                        <span className="font-semibold">Losers:</span>
                         {losers.slice(0, 3).map((l, i) => (
-                          <span key={l.name + i}>
-                            {i > 0 && ', '}
-                            <span className="status-negative font-semibold">
-                              {l.name} ({formatMoneyWithSign(l.netResult)})
-                            </span>
+                          <span key={l.name + i} className="ml-2">
+                            {i > 0 ? ' • ' : ''}
+                            <span className="status-negative">{l.name}</span>
+                            <span className="text-theme-secondary"> {formatMoneyWithSign(l.netResult)}</span>
                           </span>
                         ))}
                         {losers.length > 3 && (
-                          <span className="text-theme-secondary"> +{losers.length - 3} more</span>
+                          <span className="ml-2 text-theme-secondary"> +{losers.length - 3} more</span>
                         )}
                       </div>
                     )}
+                    <div className="text-xs text-theme-secondary text-right mt-1">
+                      {results.length} players
+                    </div>
                   </div>
-                </div>
               </div>
             ))}
             {recentGamesData.length > 0 && recentGamesData.length < totalCompletedSessions && (
-              <div className="text-center mt-4">
+              <div className="text-center mt-6">
                 <button
                   onClick={() => setRecentGamesCount(prev => prev + 5)}
                   className="px-6 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100"

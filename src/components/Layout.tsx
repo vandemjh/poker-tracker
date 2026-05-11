@@ -200,10 +200,10 @@ const Layout: React.FC = () => {
                 Link
               </button>
             )}
-            <button onClick={() => { navigate('/settings'); closeMobileMenu(); }} className={`w-10 h-10 flex items-center justify-center border-3 transition-all duration-100 ${isSettingsActive ? 'bg-nb-yellow text-nb-black translate-x-[2px] translate-y-[2px]' : 'hover:translate-x-[1px] hover:translate-y-[1px]'}`} style={{ borderColor: 'var(--color-border)', backgroundColor: isSettingsActive ? undefined : 'var(--color-bg-card)', boxShadow: isSettingsActive ? '0px 0px 0px 0px var(--color-shadow)' : '2px 2px 0px 0px var(--color-shadow)' }} title="Settings">
-              <span className="text-lg">⚙️</span>
-            </button>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-around gap-2">
+              <button onClick={() => { navigate('/settings'); closeMobileMenu(); }} className={`w-12 h-12 flex items-center justify-center border-3 transition-all duration-100 ${isSettingsActive ? 'bg-nb-yellow text-nb-black translate-x-[2px] translate-y-[2px]' : 'hover:translate-x-[1px] hover:translate-y-[1px]'}`} style={{ borderColor: 'var(--color-border)', backgroundColor: isSettingsActive ? undefined : 'var(--color-bg-card)', boxShadow: isSettingsActive ? '0px 0px 0px 0px var(--color-shadow)' : '2px 2px 0px 0px var(--color-shadow)' }} title="Settings">
+                <span className="text-lg">⚙️</span>
+              </button>
               <ThemeToggle />
               <GoogleAuthButton />
             </div>
