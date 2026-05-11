@@ -1,9 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
@@ -24,7 +21,7 @@ export default {
       },
       boxShadow: {
         // Neo-brutalist offset shadows (no blur)
-        'nb': '4px 4px 0px 0px #000000',
+        nb: '4px 4px 0px 0px #000000',
         'nb-sm': '2px 2px 0px 0px #000000',
         'nb-lg': '6px 6px 0px 0px #000000',
         'nb-xl': '8px 8px 0px 0px #000000',
@@ -32,20 +29,20 @@ export default {
         'nb-active': '0px 0px 0px 0px #000000',
       },
       borderWidth: {
-        '3': '3px',
-        '4': '4px',
-        '5': '5px',
+        3: '3px',
+        4: '4px',
+        5: '5px',
       },
       fontFamily: {
-        'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
-        'sans': ['Inter', 'system-ui', 'sans-serif'],
-        'display': ['Space Grotesk', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Space Grotesk', 'system-ui', 'sans-serif'],
       },
       translate: {
-        'nb': '4px',
+        nb: '4px',
         'nb-hover': '2px',
       },
     },
   },
   plugins: [],
-}
+};

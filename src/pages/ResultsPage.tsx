@@ -19,11 +19,17 @@ import type { PlayerStatistics } from '../types';
 
 const ResultsPage: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { players } = useAppSelector(state => state.players);
-  const { sessions, playerSessions } = useAppSelector(state => state.sessions);
-  const { dateFilter, selectedPlayers, sortColumn, sortDirection, isInitializing } = useAppSelector(
-    state => state.ui
+  const { players } = useAppSelector((state) => state.players);
+  const { sessions, playerSessions } = useAppSelector(
+    (state) => state.sessions,
   );
+  const {
+    dateFilter,
+    selectedPlayers,
+    sortColumn,
+    sortDirection,
+    isInitializing,
+  } = useAppSelector((state) => state.ui);
 
   const [showAllGames, setShowAllGames] = useState(false);
   const [playerSearch, setPlayerSearch] = useState('');
@@ -31,7 +37,12 @@ const ResultsPage: React.FC = () => {
   const [recentGamesCount, setRecentGamesCount] = useState(5);
 
   const statistics = useMemo(() => {
-    return calculateAllPlayerStatistics(players, sessions, playerSessions, dateFilter);
+    return calculateAllPlayerStatistics(
+      players,
+      sessions,
+      playerSessions,
+      dateFilter,
+    );
   }, [players, sessions, playerSessions, dateFilter]);
 
   // Sort statistics by session count to get top 10 players
@@ -39,14 +50,17 @@ const ResultsPage: React.FC = () => {
     return [...statistics].sort((a, b) => b.sessionCount - a.sessionCount);
   }, [statistics]);
 
-  const top10Players = useMemo(() => sortedByGames.slice(0, 10), [sortedByGames]);
+  const top10Players = useMemo(
+    () => sortedByGames.slice(0, 10),
+    [sortedByGames],
+  );
   const otherPlayers = useMemo(() => sortedByGames.slice(10), [sortedByGames]);
 
   // Filter other players by search term
   const filteredOtherPlayers = useMemo(() => {
     if (!playerSearch) return otherPlayers;
-    return otherPlayers.filter(p =>
-      p.playerName.toLowerCase().includes(playerSearch.toLowerCase())
+    return otherPlayers.filter((p) =>
+      p.playerName.toLowerCase().includes(playerSearch.toLowerCase()),
     );
   }, [otherPlayers, playerSearch]);
 
@@ -64,8 +78,9 @@ const ResultsPage: React.FC = () => {
   }, [statistics, sortColumn, sortDirection]);
 
   const chartData = useMemo(() => {
-    return statistics.filter(s =>
-      selectedPlayers.length === 0 || selectedPlayers.includes(s.playerId)
+    return statistics.filter(
+      (s) =>
+        selectedPlayers.length === 0 || selectedPlayers.includes(s.playerId),
     );
   }, [statistics, selectedPlayers]);
 
@@ -74,13 +89,13 @@ const ResultsPage: React.FC = () => {
   const limitedChartData = useMemo(() => {
     // Get all unique dates across all players and sort them
     const allDates = new Set<string>();
-    chartData.forEach(player => {
-      player.balanceHistory.forEach(entry => {
+    chartData.forEach((player) => {
+      player.balanceHistory.forEach((entry) => {
         allDates.add(entry.date);
       });
     });
     const sortedDates = Array.from(allDates).sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+      (a, b) => new Date(a).getTime() - new Date(b).getTime(),
     );
 
     // Determine which dates to show
@@ -89,9 +104,11 @@ const ResultsPage: React.FC = () => {
       : new Set(sortedDates.slice(-20));
 
     // Filter and adjust each player's balance history
-    return chartData.map(player => {
+    return chartData.map((player) => {
       // Filter to only included dates
-      const filteredHistory = player.balanceHistory.filter(entry => datesToShow.has(entry.date));
+      const filteredHistory = player.balanceHistory.filter((entry) =>
+        datesToShow.has(entry.date),
+      );
 
       if (filteredHistory.length === 0) {
         return { ...player, balanceHistory: [] };
@@ -100,13 +117,16 @@ const ResultsPage: React.FC = () => {
       // Calculate the offset: balance just before the first shown entry
       // We want to subtract the accumulated balance up to (but not including) the first shown game
       const firstShownDate = filteredHistory[0].date;
-      const firstEntryIndex = player.balanceHistory.findIndex(entry => entry.date === firstShownDate);
-      const offsetBalance = firstEntryIndex > 0
-        ? player.balanceHistory[firstEntryIndex - 1].balance
-        : 0;
+      const firstEntryIndex = player.balanceHistory.findIndex(
+        (entry) => entry.date === firstShownDate,
+      );
+      const offsetBalance =
+        firstEntryIndex > 0
+          ? player.balanceHistory[firstEntryIndex - 1].balance
+          : 0;
 
       // Adjust all balances to start from zero
-      const adjustedHistory = filteredHistory.map(entry => ({
+      const adjustedHistory = filteredHistory.map((entry) => ({
         ...entry,
         balance: entry.balance - offsetBalance,
       }));
@@ -118,8 +138,8 @@ const ResultsPage: React.FC = () => {
   // Count total games in the data
   const totalGames = useMemo(() => {
     const allDates = new Set<string>();
-    chartData.forEach(player => {
-      player.balanceHistory.forEach(entry => {
+    chartData.forEach((player) => {
+      player.balanceHistory.forEach((entry) => {
         allDates.add(entry.date);
       });
     });
@@ -128,26 +148,26 @@ const ResultsPage: React.FC = () => {
 
   // Total completed sessions count
   const totalCompletedSessions = useMemo(() => {
-    return [...sessions].filter(s => s.isComplete).length;
+    return [...sessions].filter((s) => s.isComplete).length;
   }, [sessions]);
 
   // Recent games data for the Recent Games component
   const recentGamesData = useMemo(() => {
     // Get all completed sessions sorted by date (most recent first)
     const allCompletedSessions = [...sessions]
-      .filter(s => s.isComplete)
+      .filter((s) => s.isComplete)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const recentSessions = allCompletedSessions.slice(0, recentGamesCount);
 
-    return recentSessions.map(session => {
+    return recentSessions.map((session) => {
       // Get player results for this session
       const sessionPlayerSessions = playerSessions.filter(
-        ps => ps.sessionId === session.id
+        (ps) => ps.sessionId === session.id,
       );
       const results = sessionPlayerSessions
-        .map(ps => {
-          const player = players.find(p => p.id === ps.playerId);
+        .map((ps) => {
+          const player = players.find((p) => p.id === ps.playerId);
           return {
             name: player?.name || 'Unknown',
             netResult: ps.netResult,
@@ -156,10 +176,10 @@ const ResultsPage: React.FC = () => {
         .sort((a, b) => b.netResult - a.netResult);
 
       const winners = results
-        .filter(r => r.netResult > 0)
+        .filter((r) => r.netResult > 0)
         .sort((a, b) => b.netResult - a.netResult);
       const losers = results
-        .filter(r => r.netResult < 0)
+        .filter((r) => r.netResult < 0)
         .sort((a, b) => b.netResult - a.netResult);
 
       return {
@@ -180,7 +200,7 @@ const ResultsPage: React.FC = () => {
     if (selectedPlayers.length === statistics.length) {
       dispatch(clearPlayerSelection());
     } else {
-      dispatch(selectAllPlayers(statistics.map(s => s.playerId)));
+      dispatch(selectAllPlayers(statistics.map((s) => s.playerId)));
     }
   };
 
@@ -207,7 +227,8 @@ const ResultsPage: React.FC = () => {
         <div className="text-6xl mb-4">📊</div>
         <h2 className="mb-4">No Data Yet</h2>
         <p className="text-theme-secondary mb-6">
-          Link a Google Sheet or start a new game session to see your statistics.
+          Link a Google Sheet or start a new game session to see your
+          statistics.
         </p>
       </div>
     );
@@ -225,8 +246,13 @@ const ResultsPage: React.FC = () => {
             <input
               type="date"
               value={dateFilter.startDate || ''}
-              onChange={e =>
-                dispatch(setDateFilter({ ...dateFilter, startDate: e.target.value || null }))
+              onChange={(e) =>
+                dispatch(
+                  setDateFilter({
+                    ...dateFilter,
+                    startDate: e.target.value || null,
+                  }),
+                )
               }
               className="input-nb w-36 py-1 text-sm"
               title="Start Date"
@@ -235,8 +261,13 @@ const ResultsPage: React.FC = () => {
             <input
               type="date"
               value={dateFilter.endDate || ''}
-              onChange={e =>
-                dispatch(setDateFilter({ ...dateFilter, endDate: e.target.value || null }))
+              onChange={(e) =>
+                dispatch(
+                  setDateFilter({
+                    ...dateFilter,
+                    endDate: e.target.value || null,
+                  }),
+                )
               }
               className="input-nb w-36 py-1 text-sm"
               title="End Date"
@@ -258,19 +289,21 @@ const ResultsPage: React.FC = () => {
           <button
             onClick={handleToggleAll}
             className={`badge-nb cursor-pointer transition-colors ${
-              selectedPlayers.length === statistics.length || selectedPlayers.length === 0
+              selectedPlayers.length === statistics.length ||
+              selectedPlayers.length === 0
                 ? 'bg-nb-yellow text-nb-black'
                 : 'bg-theme-card'
             }`}
           >
             {selectedPlayers.length === 0 ? 'All' : 'Toggle All'}
           </button>
-          {top10Players.map(stat => (
+          {top10Players.map((stat) => (
             <button
               key={stat.playerId}
               onClick={() => dispatch(togglePlayerSelection(stat.playerId))}
               className={`badge-nb cursor-pointer transition-colors ${
-                selectedPlayers.length === 0 || selectedPlayers.includes(stat.playerId)
+                selectedPlayers.length === 0 ||
+                selectedPlayers.includes(stat.playerId)
                   ? 'bg-nb-blue text-nb-white'
                   : 'bg-theme-card'
               }`}
@@ -306,31 +339,40 @@ const ResultsPage: React.FC = () => {
                       boxShadow: '4px 4px 0px 0px var(--color-shadow)',
                     }}
                   >
-                    <div className="p-2 border-b-2" style={{ borderColor: 'var(--color-border)' }}>
+                    <div
+                      className="p-2 border-b-2"
+                      style={{ borderColor: 'var(--color-border)' }}
+                    >
                       <input
                         type="text"
                         placeholder="Search players..."
                         value={playerSearch}
-                        onChange={e => setPlayerSearch(e.target.value)}
+                        onChange={(e) => setPlayerSearch(e.target.value)}
                         className="input-nb py-1 text-sm"
                         autoFocus
                       />
                     </div>
                     <div className="max-h-48 overflow-y-auto">
-                      {filteredOtherPlayers.map(stat => (
+                      {filteredOtherPlayers.map((stat) => (
                         <button
                           key={stat.playerId}
                           onClick={() => handleSelectOtherPlayer(stat.playerId)}
                           className={`w-full text-left px-3 py-2 hover:bg-nb-yellow hover:text-nb-black transition-colors flex items-center justify-between ${
-                            selectedPlayers.includes(stat.playerId) ? 'bg-nb-blue text-nb-white' : ''
+                            selectedPlayers.includes(stat.playerId)
+                              ? 'bg-nb-blue text-nb-white'
+                              : ''
                           }`}
                         >
                           <span>{stat.playerName}</span>
-                          <span className="text-xs opacity-70">{stat.sessionCount} games</span>
+                          <span className="text-xs opacity-70">
+                            {stat.sessionCount} games
+                          </span>
                         </button>
                       ))}
                       {filteredOtherPlayers.length === 0 && (
-                        <div className="px-3 py-2 text-theme-secondary text-sm">No players found</div>
+                        <div className="px-3 py-2 text-theme-secondary text-sm">
+                          No players found
+                        </div>
                       )}
                     </div>
                   </div>
@@ -369,7 +411,7 @@ const ResultsPage: React.FC = () => {
         )}
         {recentGamesData.length > 0 && (
           <div className="space-y-3">
-            {recentGamesData.map(({ session, results, winners, losers }, index) => (
+            {recentGamesData.map(({ session, results, winners, losers }) => (
               <div
                 key={session.id}
                 className="p-3 border-2 transition-colors"
@@ -378,71 +420,84 @@ const ResultsPage: React.FC = () => {
                   backgroundColor: 'var(--color-bg)',
                 }}
               >
-                 <div className="mb-2">
-                    <div className="font-semibold text-lg">
-                      {new Date(session.date).toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </div>
-                    <div className="text-sm text-theme-secondary">
-                      {session.stakes && <span>{session.stakes} • </span>}
-                      {session.location || ''}
-                    </div>
+                <div className="mb-2">
+                  <div className="font-semibold text-lg">
+                    {new Date(session.date).toLocaleDateString(undefined, {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
                   </div>
-                  <div>
-                    {winners.length > 0 && (
-                      <div className="mb-2">
-                        <span className="font-semibold">Winners:</span>
-                        {winners.slice(0, 3).map((w, i) => (
-                          <span key={w.name + i} className="ml-2">
-                            {i > 0 ? ' • ' : ''}
-                            <span className="status-positive">{w.name}</span>
-                            <span className="text-theme-secondary"> {formatMoneyWithSign(w.netResult)}</span>
-                          </span>
-                        ))}
-                        {winners.length > 3 && (
-                          <span className="ml-2 text-theme-secondary"> +{winners.length - 3} more</span>
-                        )}
-                      </div>
-                    )}
-                    {losers.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Losers:</span>
-                        {losers.slice(0, 3).map((l, i) => (
-                          <span key={l.name + i} className="ml-2">
-                            {i > 0 ? ' • ' : ''}
-                            <span className="status-negative">{l.name}</span>
-                            <span className="text-theme-secondary"> {formatMoneyWithSign(l.netResult)}</span>
-                          </span>
-                        ))}
-                        {losers.length > 3 && (
-                          <span className="ml-2 text-theme-secondary"> +{losers.length - 3} more</span>
-                        )}
-                      </div>
-                    )}
-                    <div className="text-xs text-theme-secondary text-right mt-1">
-                      {results.length} players
-                    </div>
+                  <div className="text-sm text-theme-secondary">
+                    {session.stakes && <span>{session.stakes} • </span>}
+                    {session.location || ''}
                   </div>
+                </div>
+                <div>
+                  {winners.length > 0 && (
+                    <div className="mb-2">
+                      <span className="font-semibold">Winners:</span>
+                      {winners.slice(0, 3).map((w, i) => (
+                        <span key={w.name + i} className="ml-2">
+                          {i > 0 ? ' • ' : ''}
+                          <span className="status-positive">{w.name}</span>
+                          <span className="text-theme-secondary">
+                            {' '}
+                            {formatMoneyWithSign(w.netResult)}
+                          </span>
+                        </span>
+                      ))}
+                      {winners.length > 3 && (
+                        <span className="ml-2 text-theme-secondary">
+                          {' '}
+                          +{winners.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {losers.length > 0 && (
+                    <div>
+                      <span className="font-semibold">Losers:</span>
+                      {losers.slice(0, 3).map((l, i) => (
+                        <span key={l.name + i} className="ml-2">
+                          {i > 0 ? ' • ' : ''}
+                          <span className="status-negative">{l.name}</span>
+                          <span className="text-theme-secondary">
+                            {' '}
+                            {formatMoneyWithSign(l.netResult)}
+                          </span>
+                        </span>
+                      ))}
+                      {losers.length > 3 && (
+                        <span className="ml-2 text-theme-secondary">
+                          {' '}
+                          +{losers.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-xs text-theme-secondary text-right mt-1">
+                    {results.length} players
+                  </div>
+                </div>
               </div>
             ))}
-            {recentGamesData.length > 0 && recentGamesData.length < totalCompletedSessions && (
-              <div className="text-center mt-6">
-                <button
-                  onClick={() => setRecentGamesCount(prev => prev + 5)}
-                  className="px-6 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100"
-                  style={{
-                    borderColor: 'var(--color-border)',
-                    boxShadow: '4px 4px 0px 0px var(--color-shadow)',
-                  }}
-                >
-                  Load 5 More
-                </button>
-              </div>
-            )}
+            {recentGamesData.length > 0 &&
+              recentGamesData.length < totalCompletedSessions && (
+                <div className="text-center mt-6">
+                  <button
+                    onClick={() => setRecentGamesCount((prev) => prev + 5)}
+                    className="px-6 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100"
+                    style={{
+                      borderColor: 'var(--color-border)',
+                      boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+                    }}
+                  >
+                    Load 5 More
+                  </button>
+                </div>
+              )}
           </div>
         )}
       </div>
@@ -505,21 +560,39 @@ const ResultsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {sortedStatistics.map(stat => (
+            {sortedStatistics.map((stat) => (
               <tr key={stat.playerId}>
                 <td className="font-semibold">{stat.playerName}</td>
-                <td className={stat.totalProfit >= 0 ? 'status-positive' : 'status-negative'}>
+                <td
+                  className={
+                    stat.totalProfit >= 0
+                      ? 'status-positive'
+                      : 'status-negative'
+                  }
+                >
                   {formatMoneyWithSign(stat.totalProfit)}
                 </td>
                 <td>{stat.sessionCount}</td>
                 <td>{formatPercentage(stat.winRate)}</td>
-                <td className={stat.avgWinLoss >= 0 ? 'status-positive' : 'status-negative'}>
+                <td
+                  className={
+                    stat.avgWinLoss >= 0 ? 'status-positive' : 'status-negative'
+                  }
+                >
                   {formatMoneyWithSign(stat.avgWinLoss)}
                 </td>
-                <td className="status-positive">{formatMoney(stat.bestSession)}</td>
-                <td className="status-negative">{formatMoney(stat.worstSession)}</td>
+                <td className="status-positive">
+                  {formatMoney(stat.bestSession)}
+                </td>
+                <td className="status-negative">
+                  {formatMoney(stat.worstSession)}
+                </td>
                 <td>{stat.variance.toFixed(2)}</td>
-                <td className={stat.roi >= 0 ? 'status-positive' : 'status-negative'}>
+                <td
+                  className={
+                    stat.roi >= 0 ? 'status-positive' : 'status-negative'
+                  }
+                >
                   {formatPercentage(stat.roi)}
                 </td>
               </tr>

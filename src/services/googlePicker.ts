@@ -86,7 +86,7 @@ function loadPickerApi(): Promise<void> {
           pickerApiLoaded = true;
           pickerApiLoading = false;
           resolve();
-          loadCallbacks.forEach(cb => cb());
+          loadCallbacks.forEach((cb) => cb());
           loadCallbacks.length = 0;
         });
       };
@@ -100,7 +100,7 @@ function loadPickerApi(): Promise<void> {
         pickerApiLoaded = true;
         pickerApiLoading = false;
         resolve();
-        loadCallbacks.forEach(cb => cb());
+        loadCallbacks.forEach((cb) => cb());
         loadCallbacks.length = 0;
       });
     }
@@ -109,7 +109,7 @@ function loadPickerApi(): Promise<void> {
 
 export async function openGooglePicker(
   accessToken: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<SelectedFile | null> {
   await loadPickerApi();
 
@@ -126,7 +126,11 @@ export async function openGooglePicker(
       .setDeveloperKey(apiKey)
       .setTitle('Select a Google Sheet to import')
       .setCallback((data: PickerResponse) => {
-        if (data.action === google.picker.Action.PICKED && data.docs && data.docs.length > 0) {
+        if (
+          data.action === google.picker.Action.PICKED &&
+          data.docs &&
+          data.docs.length > 0
+        ) {
           const doc = data.docs[0];
           resolve({
             id: doc.id,

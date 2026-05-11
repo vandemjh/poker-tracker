@@ -9,13 +9,16 @@ A web-based poker tracker application that enables users to track poker game ses
 ## 2. System Overview
 
 ### 2.1 Purpose
+
 Enable poker game organizers to:
+
 - Track player buy-ins and cash-outs across multiple sessions
 - Import historical game data from CSV files
 - View player statistics and performance trends
 - Manage live game sessions with real-time balance tracking
 
 ### 2.2 Target Users
+
 - Home game organizers tracking buy-ins and cash-outs during live games
 - Players reviewing their performance history across multiple sessions
 
@@ -26,9 +29,11 @@ Enable poker game organizers to:
 ### 3.1 Data Import Module
 
 #### 3.1.1 CSV Import
+
 **Requirement**: Support importing player results from CSV files
 
 **Input Format**:
+
 ```
 Players,1/2/2025,1/8/2025,Total,Average,Other Stats...
 Zach,-$30.00,-26.50,-56.50,-28.25,...
@@ -37,6 +42,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 ```
 
 **Specifications**:
+
 - First row: `Players` column header followed by date columns (MM/DD/YYYY format)
 - All columns after date columns should be ignored (legacy statistics from spreadsheet)
 - Date column detection: Parse columns as dates; stop processing when a column cannot be parsed as a date
@@ -47,15 +53,18 @@ Jack L,$61.50,34.25,95.75,47.88,...
 - Provide error feedback for malformed data
 
 **Data Validation**:
+
 - Ensure sum of all player results equals zero for each session (zero-sum game)
 - Flag sessions with mismatched totals
 - Warn on duplicate player names within same session
 
 **Data Processing**:
+
 - Automatically sort sessions chronologically by date
 - Handle duplicate dates by preserving import order
 
 **Error Handling**:
+
 - Display line-by-line import errors
 - Allow partial import with error report
 - Provide downloadable error log
@@ -67,6 +76,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Display comprehensive statistics for each player
 
 **Core Metrics**:
+
 - **Total Profit/Loss**: Cumulative earnings across all sessions
 - **Session Count**: Number of games played
 - **Win Rate**: Percentage of profitable sessions
@@ -78,6 +88,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 - **ROI**: Return on investment (total profit / total buy-ins)
 
 **Display Options**:
+
 - Sortable table by any metric
 - Filterable by date range
 - Expandable rows showing session-by-session breakdown
@@ -88,6 +99,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Interactive line chart showing player balance progression over time
 
 **Features**:
+
 - X-axis: Date/session chronology
 - Y-axis: Cumulative balance
 - Individual line for each player
@@ -106,6 +118,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Start and manage live poker games
 
 **Session Setup**:
+
 - Session name (optional, defaults to date/time)
 - Date and time (defaults to current)
 - Game type (cash game, tournament)
@@ -117,17 +130,20 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Add players and track buy-ins during active session
 
 **Add Player**:
+
 - Select from existing player list or add new player
 - Enter initial buy-in amount
 - Timestamp of entry
 
 **Add Buy-in**:
+
 - Select player from active session
 - Enter additional buy-in amount
 - Timestamp of buy-in
 - Display total invested for player
 
 **Player Display**:
+
 - List of active players
 - Total buy-in per player
 - Cash-out amount (entered at session end)
@@ -138,12 +154,14 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Real-time calculation of total money on table
 
 **Display**:
+
 - Sum of all buy-ins
 - Sum of all cash-outs (if session ended)
 - Remaining balance (buy-ins minus cash-outs)
 - Alert if totals don't match (zero-sum validation)
 
 **Features**:
+
 - Live updating as buy-ins/cash-outs are added
 - Visual indicator when balanced (green) or unbalanced (red)
 - Breakdown by player
@@ -153,6 +171,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 **Requirement**: Finalize game session and record results
 
 **End Session Flow**:
+
 1. Enter cash-out amount for each player
 2. System calculates profit/loss (cash-out minus buy-ins)
 3. Validate zero-sum (total profit/loss = $0)
@@ -167,6 +186,7 @@ Jack L,$61.50,34.25,95.75,47.88,...
 ### 4.1 Core Entities
 
 #### Player
+
 ```typescript
 interface Player {
   id: string;
@@ -177,6 +197,7 @@ interface Player {
 ```
 
 #### Session
+
 ```typescript
 interface Session {
   id: string;
@@ -192,6 +213,7 @@ interface Session {
 ```
 
 #### PlayerSession (Join Table)
+
 ```typescript
 interface PlayerSession {
   id: string;
@@ -205,6 +227,7 @@ interface PlayerSession {
 ```
 
 #### BuyIn
+
 ```typescript
 interface BuyIn {
   id: string;
@@ -238,6 +261,7 @@ interface PlayerStatistics {
 ## 5. Technical Stack Recommendations
 
 ### 5.1 Frontend
+
 - **Framework**: React with TypeScript and Redux (no Next.js)
 - **State Management**: Redux Toolkit
 - **Design System**: Neo-brutalist design (https://www.neobrutalism.dev/)
@@ -255,6 +279,7 @@ interface PlayerStatistics {
 ### 5.2 Backend & Storage
 
 **Google Drive Integration**:
+
 - Use Google Drive API for data persistence
 - Store application data as JSON file in user's Google Drive
 - OAuth 2.0 authentication flow for Drive access
@@ -262,6 +287,7 @@ interface PlayerStatistics {
 - Automatic sync on data changes
 
 **Implementation Details**:
+
 - Use `@react-oauth/google` for authentication
 - Google Drive API v3 for file operations
 - Store data in `/appDataFolder` (hidden folder, only accessible by app)
@@ -269,6 +295,7 @@ interface PlayerStatistics {
 - Data structure: Single JSON file with schema version for migrations
 
 **File Structure**:
+
 ```json
 {
   "version": "1.0",
@@ -280,6 +307,7 @@ interface PlayerStatistics {
 ```
 
 ### 5.3 Deployment
+
 - **Hosting**: GitHub Pages
 - **Build**: Create React App or Vite build process
 - **CI/CD**: GitHub Actions for automatic deployment on push to main branch
@@ -290,34 +318,37 @@ interface PlayerStatistics {
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance
+
 - CSV import: Handle files up to 500 sessions
 - Chart rendering: Smooth with 20+ data points per player
 - Session list: Display all without pagination (expected max ~100 sessions)
 - Google Drive sync: Debounced saves (3 second delay after last change)
 
 ### 6.2 Usability
+
 - Mobile-responsive design (Neo-brutalist responsive patterns)
 - Simple navigation - maximum 2 main views (Results and Play)
 - Fast data entry during live games
 - Clear visual feedback for all actions
 
 ### 6.3 Data Integrity
+
 - Automatic validation of zero-sum games
 - Google Drive automatic sync and backup
 - Imported historical data is read-only (cannot be edited)
 - Manual session entries can be edited/deleted before sync
 
-
-
 ## 7. User Interface Mockup Structure
 
 ### 7.1 Navigation
+
 - **Results** (landing page - statistics and charts)
 - **Play** (live game management)
 - **Import CSV** (modal/overlay for CSV upload)
 - **Google Drive** (connect/disconnect, sync status indicator)
 
 ### 7.2 Results Page Layout
+
 ```
 +----------------------------------------------------------+
 | [Date Range Filter] [Player Filter] [Export CSV]         |
@@ -337,6 +368,7 @@ interface PlayerStatistics {
 ```
 
 ### 7.3 Play Page Layout
+
 ```
 +----------------------------------------------------------+
 | Active Session: January 12, 2025 - $1/$2                 |
@@ -357,6 +389,7 @@ interface PlayerStatistics {
 ## 8. Development Phases
 
 ### Phase 1: Core Functionality
+
 - [ ] Google Drive authentication and file operations
 - [ ] Redux store setup with data models
 - [ ] CSV import with validation
@@ -365,6 +398,7 @@ interface PlayerStatistics {
 - [ ] Zero-sum validation
 
 ### Phase 2: Statistics & Visualization
+
 - [ ] Player statistics calculations (all metrics)
 - [ ] Balance chart with Chart.js/Recharts
 - [ ] Chart player toggle functionality
@@ -372,6 +406,7 @@ interface PlayerStatistics {
 - [ ] Date range filtering
 
 ### Phase 3: Neo-brutalist UI & Polish
+
 - [ ] Implement Neo-brutalist design system
 - [ ] Mobile responsive layouts
 - [ ] Loading states and error handling
@@ -385,21 +420,25 @@ interface PlayerStatistics {
 ### Resolved Design Decisions
 
 **Single-User Architecture**
+
 - No multi-tenant support needed
 - Each user imports their own CSV and maintains their own Google Drive data
 - No player authentication required
 
 **Data Immutability**
+
 - Historical data imported via CSV is read-only
 - Manual entries can be edited before Google Drive sync
 - Once synced, data should be treated as canonical
 
 **Player Name Handling**
+
 - Player names may have variations (e.g., "Jack V" vs "Jack V." vs "JackV")
 - System should display names exactly as imported/entered
 - Future consideration: Add manual player merging feature if needed
 
 **Session Timing**
+
 - Games extending past midnight belong entirely to the session start date
 - No session splitting required
 

@@ -115,7 +115,7 @@ class GoogleDriveService {
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
         },
-      }
+      },
     );
 
     if (!response.ok) {
@@ -142,7 +142,7 @@ class GoogleDriveService {
 
     try {
       const response = await fetch(
-        `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${this.accessToken}`
+        `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${this.accessToken}`,
       );
       return response.ok;
     } catch {
@@ -177,7 +177,7 @@ class GoogleDriveService {
   private async makeRequest(
     url: string,
     options: RequestInit = {},
-    retryCount: number = 0
+    retryCount: number = 0,
   ): Promise<Response> {
     if (!this.accessToken) {
       throw new Error('Not authenticated');
@@ -216,7 +216,7 @@ class GoogleDriveService {
 
   async findAppDataFile(): Promise<string | null> {
     const response = await this.makeRequest(
-      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${APP_DATA_FILE_NAME}'&fields=files(id,name,modifiedTime)`
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${APP_DATA_FILE_NAME}'&fields=files(id,name,modifiedTime)`,
     );
 
     const data = await response.json();
@@ -241,7 +241,7 @@ class GoogleDriveService {
 
       // Download file content
       const response = await this.makeRequest(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       );
 
       const data: AppData = await response.json();
@@ -269,7 +269,7 @@ class GoogleDriveService {
           {
             method: 'PATCH',
             body: blob,
-          }
+          },
         );
       } else {
         // Create new file
@@ -281,7 +281,7 @@ class GoogleDriveService {
         const form = new FormData();
         form.append(
           'metadata',
-          new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+          new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
         );
         form.append('file', blob);
 
@@ -293,7 +293,7 @@ class GoogleDriveService {
               Authorization: `Bearer ${this.accessToken}`,
             },
             body: form,
-          }
+          },
         );
 
         if (!response.ok) {
@@ -319,7 +319,7 @@ class GoogleDriveService {
         `https://www.googleapis.com/drive/v3/files/${this.fileId}`,
         {
           method: 'DELETE',
-        }
+        },
       );
       this.fileId = null;
     }
@@ -333,7 +333,7 @@ class GoogleDriveService {
 
       // Fetch all data from the totals sheet
       const response = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
       );
 
       const data = await response.json();
@@ -350,7 +350,7 @@ class GoogleDriveService {
   async appendSessionColumn(
     spreadsheetId: string,
     sessionDate: Date,
-    playerResults: { playerName: string; netResult: number }[]
+    playerResults: { playerName: string; netResult: number }[],
   ): Promise<void> {
     try {
       // Get the totals sheet name
@@ -358,7 +358,7 @@ class GoogleDriveService {
 
       // Get existing data to find the rightmost column and player rows
       const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
       );
       const existingData = await dataResponse.json();
       const rows: (string | number)[][] = existingData.values || [];
@@ -404,12 +404,15 @@ class GoogleDriveService {
       }
 
       // Use existing column if found, otherwise append to the right
-      const targetColIndex = existingColIndex !== -1 ? existingColIndex : maxCol;
+      const targetColIndex =
+        existingColIndex !== -1 ? existingColIndex : maxCol;
 
       // Create a map of player names to row indices (case-insensitive)
       const playerRowMap = new Map<string, number>();
       for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        const playerName = String(rows[i]?.[0] ?? '')
+          .trim()
+          .toLowerCase();
         if (playerName) {
           playerRowMap.set(playerName, i);
         }
@@ -420,9 +423,11 @@ class GoogleDriveService {
 
       // Fill in player results
       for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '').trim().toLowerCase();
+        const playerName = String(rows[i]?.[0] ?? '')
+          .trim()
+          .toLowerCase();
         const result = playerResults.find(
-          pr => pr.playerName.toLowerCase() === playerName
+          (pr) => pr.playerName.toLowerCase() === playerName,
         );
 
         if (result) {
@@ -436,7 +441,7 @@ class GoogleDriveService {
       // Check if any new players need to be added
       const existingPlayers = new Set(playerRowMap.keys());
       const newPlayers = playerResults.filter(
-        pr => !existingPlayers.has(pr.playerName.toLowerCase())
+        (pr) => !existingPlayers.has(pr.playerName.toLowerCase()),
       );
 
       // Add new players to the end
@@ -459,9 +464,9 @@ class GoogleDriveService {
           body: JSON.stringify({
             range,
             majorDimension: 'COLUMNS',
-            values: [columnValues.map(v => v[0])],
+            values: [columnValues.map((v) => v[0])],
           }),
-        }
+        },
       );
 
       // If there are new players, we need to add their names in column A
@@ -479,15 +484,17 @@ class GoogleDriveService {
             body: JSON.stringify({
               range: namesRange,
               majorDimension: 'ROWS',
-              values: newPlayers.map(p => [p.playerName]),
+              values: newPlayers.map((p) => [p.playerName]),
             }),
-          }
+          },
         );
       }
 
-      console.log(existingColIndex !== -1
-        ? 'Successfully updated existing session in spreadsheet'
-        : 'Successfully appended new session to spreadsheet');
+      console.log(
+        existingColIndex !== -1
+          ? 'Successfully updated existing session in spreadsheet'
+          : 'Successfully appended new session to spreadsheet',
+      );
     } catch (error) {
       console.error('Error saving session to spreadsheet:', error);
       throw error;
@@ -528,17 +535,17 @@ class GoogleDriveService {
   // Helper to find or create a sheet by name
   private async ensureSheetExists(
     spreadsheetId: string,
-    sheetName: string
+    sheetName: string,
   ): Promise<{ sheetId: number; existed: boolean }> {
     // Get spreadsheet metadata
     const metaResponse = await this.makeRequest(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
     );
     const metadata = await metaResponse.json();
 
     // Check if sheet already exists
     const existingSheet = metadata.sheets?.find(
-      (s: any) => s.properties.title === sheetName
+      (s: any) => s.properties.title === sheetName,
     );
 
     if (existingSheet) {
@@ -552,13 +559,15 @@ class GoogleDriveService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          requests: [{
-            addSheet: {
-              properties: { title: sheetName }
-            }
-          }]
+          requests: [
+            {
+              addSheet: {
+                properties: { title: sheetName },
+              },
+            },
+          ],
         }),
-      }
+      },
     );
 
     const createResult = await createResponse.json();
@@ -570,13 +579,13 @@ class GoogleDriveService {
   // Helper to get the "Totals" sheet name (first sheet or "Totals" if it exists)
   private async getTotalsSheetName(spreadsheetId: string): Promise<string> {
     const metaResponse = await this.makeRequest(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
     );
     const metadata = await metaResponse.json();
 
     // Look for a sheet named "Totals"
     const totalsSheet = metadata.sheets?.find(
-      (s: any) => s.properties.title === this.TOTALS_SHEET_NAME
+      (s: any) => s.properties.title === this.TOTALS_SHEET_NAME,
     );
 
     if (totalsSheet) {
@@ -585,7 +594,7 @@ class GoogleDriveService {
 
     // Otherwise return the first sheet that's not "In Progress"
     const firstSheet = metadata.sheets?.find(
-      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME
+      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME,
     );
 
     return firstSheet?.properties.title || metadata.sheets[0].properties.title;
@@ -599,7 +608,7 @@ class GoogleDriveService {
   async updateInProgressSession(
     spreadsheetId: string,
     sessionDate: Date,
-    playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[]
+    playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[],
   ): Promise<void> {
     try {
       // Ensure the "In Progress" sheet exists
@@ -633,7 +642,7 @@ class GoogleDriveService {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
-        }
+        },
       );
 
       // Then write the new data
@@ -647,7 +656,7 @@ class GoogleDriveService {
             majorDimension: 'ROWS',
             values: rows,
           }),
-        }
+        },
       );
 
       console.log('Successfully updated in-progress session in spreadsheet');
@@ -662,12 +671,12 @@ class GoogleDriveService {
     try {
       // Check if the sheet exists
       const metaResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
       );
       const metadata = await metaResponse.json();
 
       const ipSheet = metadata.sheets?.find(
-        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME
+        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME,
       );
 
       if (!ipSheet) {
@@ -681,7 +690,7 @@ class GoogleDriveService {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
-        }
+        },
       );
 
       console.log('Cleared in-progress sheet');
@@ -692,21 +701,19 @@ class GoogleDriveService {
   }
 
   // Get in-progress game data from the "In Progress" sheet
-  async getInProgressGame(
-    spreadsheetId: string
-  ): Promise<{
+  async getInProgressGame(spreadsheetId: string): Promise<{
     date: Date;
     players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
   } | null> {
     try {
       // Check if the sheet exists
       const metaResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
       );
       const metadata = await metaResponse.json();
 
       const ipSheet = metadata.sheets?.find(
-        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME
+        (s: any) => s.properties.title === this.IN_PROGRESS_SHEET_NAME,
       );
 
       if (!ipSheet) {
@@ -715,7 +722,7 @@ class GoogleDriveService {
 
       // Get the data
       const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C?valueRenderOption=UNFORMATTED_VALUE`
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C?valueRenderOption=UNFORMATTED_VALUE`,
       );
       const data = await dataResponse.json();
       const rows: (string | number)[][] = data.values || [];
@@ -734,20 +741,25 @@ class GoogleDriveService {
       const date = new Date(
         parseInt(dateParts[2], 10),
         parseInt(dateParts[0], 10) - 1,
-        parseInt(dateParts[1], 10)
+        parseInt(dateParts[1], 10),
       );
 
       // Parse player data starting from row 3 (index 2)
-      const players: { playerName: string; totalBuyIn: number; cashOut?: number }[] = [];
+      const players: {
+        playerName: string;
+        totalBuyIn: number;
+        cashOut?: number;
+      }[] = [];
 
       for (let i = 2; i < rows.length; i++) {
         const row = rows[i];
         const playerName = String(row?.[0] || '').trim();
         const totalBuyIn = parseFloat(String(row?.[1] || '0')) || 0;
         const cashOutValue = row?.[2];
-        const cashOut = cashOutValue !== undefined && cashOutValue !== ''
-          ? parseFloat(String(cashOutValue))
-          : undefined;
+        const cashOut =
+          cashOutValue !== undefined && cashOutValue !== ''
+            ? parseFloat(String(cashOutValue))
+            : undefined;
 
         if (playerName && totalBuyIn > 0) {
           players.push({ playerName, totalBuyIn, cashOut });

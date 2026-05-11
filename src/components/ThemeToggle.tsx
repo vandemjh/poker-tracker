@@ -16,9 +16,12 @@ const ThemeToggle: React.FC = () => {
 
   const getLabel = () => {
     switch (theme) {
-      case 'system': return 'System';
-      case 'light': return 'Light';
-      case 'dark': return 'Dark';
+      case 'system':
+        return 'System';
+      case 'light':
+        return 'Light';
+      case 'dark':
+        return 'Dark';
     }
   };
 

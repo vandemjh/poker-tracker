@@ -7,7 +7,7 @@ import type {
   CSVImportResult,
   CSVImportError,
   CSVImportWarning,
-  BuyIn
+  BuyIn,
 } from '../types';
 
 interface ParsedCSVData {
@@ -27,7 +27,14 @@ function parseDate(dateStr: string): Date | null {
     const year = parseInt(parts[2], 10);
 
     // Validate the date parts
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+    if (
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31 &&
+      year >= 1900 &&
+      year <= 2100
+    ) {
       const fullYear = year < 100 ? 2000 + year : year;
       const date = new Date(fullYear, month - 1, day);
       // Verify the date is valid (e.g., not Feb 30)
@@ -63,7 +70,9 @@ function serialDateToDate(serial: number): Date | null {
 }
 
 // Parse a value that could be a date string or serial number
-function parseDateValue(value: string | number | null | undefined): Date | null {
+function parseDateValue(
+  value: string | number | null | undefined,
+): Date | null {
   if (value === null || value === undefined) {
     return null;
   }
@@ -102,7 +111,6 @@ function parseMoney(value: string): number | null {
   return isNaN(num) ? null : num;
 }
 
-
 export function parseCSV(csvContent: string): ParsedCSVData {
   const errors: CSVImportError[] = [];
   const warnings: CSVImportWarning[] = [];
@@ -123,7 +131,8 @@ export function parseCSV(csvContent: string): ParsedCSVData {
       errors.push({
         line: err.row !== undefined ? err.row + 1 : index + 1,
         message: err.message,
-        data: err.row !== undefined ? String(parseResult.data[err.row]) : undefined,
+        data:
+          err.row !== undefined ? String(parseResult.data[err.row]) : undefined,
       });
     });
   }
@@ -284,7 +293,9 @@ export function processCSVFile(file: File): Promise<ParsedCSVData> {
 }
 
 // Parse spreadsheet data from Google Sheets API (array of arrays)
-export function parseSpreadsheetData(data: (string | number | null | undefined)[][]): ParsedCSVData {
+export function parseSpreadsheetData(
+  data: (string | number | null | undefined)[][],
+): ParsedCSVData {
   const errors: CSVImportError[] = [];
   const warnings: CSVImportWarning[] = [];
   const players: Player[] = [];
@@ -329,7 +340,8 @@ export function parseSpreadsheetData(data: (string | number | null | undefined)[
   if (dateColumns.length === 0) {
     errors.push({
       line: 1,
-      message: 'No valid date columns found. Expected date format (MM/DD/YYYY) or Google Sheets date values.',
+      message:
+        'No valid date columns found. Expected date format (MM/DD/YYYY) or Google Sheets date values.',
       data: String(headerRow.slice(0, 10).join(',')), // Show first 10 columns
     });
     return { players, sessions, playerSessions, errors, warnings };
@@ -451,11 +463,11 @@ export function generateImportReport(result: ParsedCSVData): CSVImportResult {
 // This ensures imported sessions reference the correct player IDs
 export function remapPlayerIds(
   parsedData: ParsedCSVData,
-  existingPlayers: Player[]
+  existingPlayers: Player[],
 ): ParsedCSVData {
   // Build a map of existing player names to their IDs
   const existingPlayerByName = new Map(
-    existingPlayers.map(p => [p.name.toLowerCase(), p.id])
+    existingPlayers.map((p) => [p.name.toLowerCase(), p.id]),
   );
 
   // Build a map of parsed player IDs to the correct IDs (existing or new)
@@ -463,7 +475,9 @@ export function remapPlayerIds(
   const remappedPlayers: Player[] = [];
 
   for (const parsedPlayer of parsedData.players) {
-    const existingId = existingPlayerByName.get(parsedPlayer.name.toLowerCase());
+    const existingId = existingPlayerByName.get(
+      parsedPlayer.name.toLowerCase(),
+    );
     if (existingId) {
       // Use existing player ID
       idMapping.set(parsedPlayer.id, existingId);
@@ -480,7 +494,7 @@ export function remapPlayerIds(
   const allPlayers = [...existingPlayers, ...remappedPlayers];
 
   // Remap player IDs in playerSessions
-  const remappedPlayerSessions = parsedData.playerSessions.map(ps => ({
+  const remappedPlayerSessions = parsedData.playerSessions.map((ps) => ({
     ...ps,
     playerId: idMapping.get(ps.playerId) || ps.playerId,
   }));
@@ -492,7 +506,10 @@ export function remapPlayerIds(
   };
 }
 
-export function generateErrorLog(errors: CSVImportError[], warnings: CSVImportWarning[]): string {
+export function generateErrorLog(
+  errors: CSVImportError[],
+  warnings: CSVImportWarning[],
+): string {
   let log = 'CSV Import Error Log\n';
   log += '=====================\n\n';
 

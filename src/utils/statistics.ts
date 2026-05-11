@@ -1,24 +1,33 @@
-import type { Player, Session, PlayerSession, PlayerStatistics, BalanceHistoryEntry } from '../types';
+import type {
+  Player,
+  Session,
+  PlayerSession,
+  PlayerStatistics,
+  BalanceHistoryEntry,
+} from '../types';
 
 export function calculatePlayerStatistics(
   player: Player,
   sessions: Session[],
   playerSessions: PlayerSession[],
-  dateFilter?: { startDate: string | null; endDate: string | null }
+  dateFilter?: { startDate: string | null; endDate: string | null },
 ): PlayerStatistics {
   // Get all player sessions for this player
   let relevantPlayerSessions = playerSessions.filter(
-    ps => ps.playerId === player.id
+    (ps) => ps.playerId === player.id,
   );
 
   // Filter by date if provided
   if (dateFilter?.startDate || dateFilter?.endDate) {
-    const sessionMap = new Map(sessions.map(s => [s.id, s]));
-    relevantPlayerSessions = relevantPlayerSessions.filter(ps => {
+    const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+    relevantPlayerSessions = relevantPlayerSessions.filter((ps) => {
       const session = sessionMap.get(ps.sessionId);
       if (!session) return false;
       const sessionDate = new Date(session.date);
-      if (dateFilter.startDate && sessionDate < new Date(dateFilter.startDate)) {
+      if (
+        dateFilter.startDate &&
+        sessionDate < new Date(dateFilter.startDate)
+      ) {
         return false;
       }
       if (dateFilter.endDate && sessionDate > new Date(dateFilter.endDate)) {
@@ -29,8 +38,8 @@ export function calculatePlayerStatistics(
   }
 
   // Only consider completed sessions
-  const sessionMap = new Map(sessions.map(s => [s.id, s]));
-  const completedPlayerSessions = relevantPlayerSessions.filter(ps => {
+  const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+  const completedPlayerSessions = relevantPlayerSessions.filter((ps) => {
     const session = sessionMap.get(ps.sessionId);
     return session?.isComplete;
   });
@@ -54,10 +63,10 @@ export function calculatePlayerStatistics(
   }
 
   // Calculate basic metrics
-  const results = completedPlayerSessions.map(ps => ps.netResult);
+  const results = completedPlayerSessions.map((ps) => ps.netResult);
   const totalProfit = results.reduce((sum, r) => sum + r, 0);
   const sessionCount = completedPlayerSessions.length;
-  const winningSessionCount = results.filter(r => r > 0).length;
+  const winningSessionCount = results.filter((r) => r > 0).length;
   const winRate = (winningSessionCount / sessionCount) * 100;
   const avgWinLoss = totalProfit / sessionCount;
   const bestSession = Math.max(...results);
@@ -66,7 +75,10 @@ export function calculatePlayerStatistics(
   // Calculate total buy-ins
   // For imported sessions where buy-in amount is 0, estimate from net result
   const totalBuyIns = completedPlayerSessions.reduce((sum, ps) => {
-    const actualBuyIns = ps.buyIns.reduce((buyInSum, b) => buyInSum + b.amount, 0);
+    const actualBuyIns = ps.buyIns.reduce(
+      (buyInSum, b) => buyInSum + b.amount,
+      0,
+    );
     if (actualBuyIns > 0) {
       // Use actual buy-in data when available
       return sum + actualBuyIns;
@@ -85,8 +97,9 @@ export function calculatePlayerStatistics(
 
   // Calculate variance and standard deviation
   const mean = avgWinLoss;
-  const squaredDifferences = results.map(r => Math.pow(r - mean, 2));
-  const variance = squaredDifferences.reduce((sum, sd) => sum + sd, 0) / sessionCount;
+  const squaredDifferences = results.map((r) => Math.pow(r - mean, 2));
+  const variance =
+    squaredDifferences.reduce((sum, sd) => sum + sd, 0) / sessionCount;
   const standardDeviation = Math.sqrt(variance);
 
   // Calculate balance history (sorted by date)
@@ -98,7 +111,9 @@ export function calculatePlayerStatistics(
     const sessionA = sessionMap.get(a.sessionId);
     const sessionB = sessionMap.get(b.sessionId);
     if (!sessionA || !sessionB) return 0;
-    return new Date(sessionA.date).getTime() - new Date(sessionB.date).getTime();
+    return (
+      new Date(sessionA.date).getTime() - new Date(sessionB.date).getTime()
+    );
   });
 
   for (const ps of sortedPlayerSessions) {
@@ -134,24 +149,26 @@ export function calculateAllPlayerStatistics(
   players: Player[],
   sessions: Session[],
   playerSessions: PlayerSession[],
-  dateFilter?: { startDate: string | null; endDate: string | null }
+  dateFilter?: { startDate: string | null; endDate: string | null },
 ): PlayerStatistics[] {
-  return players.map(player =>
-    calculatePlayerStatistics(player, sessions, playerSessions, dateFilter)
-  ).filter(stats => stats.sessionCount > 0);
+  return players
+    .map((player) =>
+      calculatePlayerStatistics(player, sessions, playerSessions, dateFilter),
+    )
+    .filter((stats) => stats.sessionCount > 0);
 }
 
 export function validateZeroSum(
   sessionId: string,
-  playerSessions: PlayerSession[]
+  playerSessions: PlayerSession[],
 ): { isValid: boolean; difference: number } {
   const sessionPlayerSessions = playerSessions.filter(
-    ps => ps.sessionId === sessionId
+    (ps) => ps.sessionId === sessionId,
   );
 
   const totalNetResult = sessionPlayerSessions.reduce(
     (sum, ps) => sum + ps.netResult,
-    0
+    0,
   );
 
   // Allow for small floating point differences

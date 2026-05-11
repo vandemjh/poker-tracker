@@ -7,7 +7,11 @@ import {
   markUnsyncedChanges,
   setImportedSpreadsheetId,
 } from '../store';
-import { parseSpreadsheetData, generateImportReport, generateErrorLog } from '../utils/csvImport';
+import {
+  parseSpreadsheetData,
+  generateImportReport,
+  generateErrorLog,
+} from '../utils/csvImport';
 import { googleDriveService } from '../services/googleDrive';
 import { openGooglePicker } from '../services/googlePicker';
 import type { CSVImportResult } from '../types';
@@ -16,12 +20,18 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 
 const CSVImportModal: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { showImportModal, isGoogleConnected } = useAppSelector(state => state.ui);
+  const { showImportModal, isGoogleConnected } = useAppSelector(
+    (state) => state.ui,
+  );
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<CSVImportResult | null>(null);
+  const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState<
+    string | null
+  >(null);
+  const [importResult, setImportResult] = useState<CSVImportResult | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const resetState = () => {
@@ -50,7 +60,9 @@ const CSVImportModal: React.FC = () => {
     }
 
     if (!GOOGLE_API_KEY) {
-      setError('Google API key not configured. Please add VITE_GOOGLE_API_KEY to your environment.');
+      setError(
+        'Google API key not configured. Please add VITE_GOOGLE_API_KEY to your environment.',
+      );
       return;
     }
 
@@ -71,7 +83,9 @@ const CSVImportModal: React.FC = () => {
       setSelectedSpreadsheetId(selectedFile.id);
 
       // Fetch the spreadsheet data
-      const spreadsheetData = await googleDriveService.getSpreadsheetData(selectedFile.id);
+      const spreadsheetData = await googleDriveService.getSpreadsheetData(
+        selectedFile.id,
+      );
 
       // Parse the data
       const result = parseSpreadsheetData(spreadsheetData);
@@ -94,10 +108,12 @@ const CSVImportModal: React.FC = () => {
     if (!data) return;
 
     dispatch(importPlayers(data.players));
-    dispatch(importSessions({
-      sessions: data.sessions,
-      playerSessions: data.playerSessions,
-    }));
+    dispatch(
+      importSessions({
+        sessions: data.sessions,
+        playerSessions: data.playerSessions,
+      }),
+    );
     dispatch(markUnsyncedChanges());
 
     // Save the spreadsheet ID so we can write back to it later
@@ -150,7 +166,8 @@ const CSVImportModal: React.FC = () => {
           <div className="p-4 bg-nb-orange bg-opacity-20 border-3 border-nb-orange mb-4">
             <p className="font-semibold">Google Drive Not Connected</p>
             <p className="text-sm mt-1">
-              Please connect to Google Drive using the button in the navigation bar before linking a sheet.
+              Please connect to Google Drive using the button in the navigation
+              bar before linking a sheet.
             </p>
           </div>
         )}
@@ -178,10 +195,21 @@ const CSVImportModal: React.FC = () => {
               </p>
             </div>
 
-            <div className="mt-6 p-4 border-3" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border)' }}>
-              <h3 className="text-lg font-semibold mb-2">Expected Spreadsheet Format</h3>
+            <div
+              className="mt-6 p-4 border-3"
+              style={{
+                backgroundColor: 'var(--color-bg-card)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              <h3 className="text-lg font-semibold mb-2">
+                Expected Spreadsheet Format
+              </h3>
               <div className="overflow-x-auto">
-                <table className="text-xs border-2 w-full" style={{ borderColor: 'var(--color-border)' }}>
+                <table
+                  className="text-xs border-2 w-full"
+                  style={{ borderColor: 'var(--color-border)' }}
+                >
                   <thead>
                     <tr className="bg-nb-black text-nb-white">
                       <th className="p-2 border-r border-gray-600">Players</th>
@@ -192,23 +220,39 @@ const CSVImportModal: React.FC = () => {
                   </thead>
                   <tbody>
                     <tr className="border-t border-theme">
-                      <td className="p-2 border-r border-theme font-semibold">Zach</td>
-                      <td className="p-2 border-r border-theme text-nb-red">-$30.00</td>
-                      <td className="p-2 border-r border-theme text-nb-red">-$26.50</td>
+                      <td className="p-2 border-r border-theme font-semibold">
+                        Zach
+                      </td>
+                      <td className="p-2 border-r border-theme text-nb-red">
+                        -$30.00
+                      </td>
+                      <td className="p-2 border-r border-theme text-nb-red">
+                        -$26.50
+                      </td>
                       <td className="p-2">...</td>
                     </tr>
                     <tr className="border-t border-theme">
-                      <td className="p-2 border-r border-theme font-semibold">Jack V</td>
-                      <td className="p-2 border-r border-theme text-nb-green">$41.00</td>
-                      <td className="p-2 border-r border-theme text-nb-green">$25.75</td>
+                      <td className="p-2 border-r border-theme font-semibold">
+                        Jack V
+                      </td>
+                      <td className="p-2 border-r border-theme text-nb-green">
+                        $41.00
+                      </td>
+                      <td className="p-2 border-r border-theme text-nb-green">
+                        $25.75
+                      </td>
                       <td className="p-2">...</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <ul className="text-sm mt-3 space-y-1">
-                <li>First row: "Players" followed by date columns (MM/DD/YYYY)</li>
-                <li>Subsequent rows: Player name followed by profit/loss values</li>
+                <li>
+                  First row: "Players" followed by date columns (MM/DD/YYYY)
+                </li>
+                <li>
+                  Subsequent rows: Player name followed by profit/loss values
+                </li>
                 <li>Supports both $XX.XX and plain numbers</li>
                 <li>Empty cells indicate player did not participate</li>
               </ul>
@@ -220,7 +264,9 @@ const CSVImportModal: React.FC = () => {
           <div className="text-center py-8">
             <div className="animate-spin w-12 h-12 border-4 border-theme border-t-nb-yellow mx-auto mb-4"></div>
             <p className="font-semibold">
-              {selectedFileName ? `Processing "${selectedFileName}"...` : 'Selecting file...'}
+              {selectedFileName
+                ? `Processing "${selectedFileName}"...`
+                : 'Selecting file...'}
             </p>
           </div>
         )}
@@ -228,7 +274,10 @@ const CSVImportModal: React.FC = () => {
         {importResult && !isProcessing && (
           <div>
             {selectedFileName && (
-              <div className="mb-4 p-3 border-3 border-theme" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+              <div
+                className="mb-4 p-3 border-3 border-theme"
+                style={{ backgroundColor: 'var(--color-bg-card)' }}
+              >
                 <span className="font-semibold">Selected: </span>
                 {selectedFileName}
               </div>
@@ -242,7 +291,8 @@ const CSVImportModal: React.FC = () => {
                 <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
                   {importResult.errors.map((err, i) => (
                     <li key={i}>
-                      <span className="font-mono">Line {err.line}:</span> {err.message}
+                      <span className="font-mono">Line {err.line}:</span>{' '}
+                      {err.message}
                     </li>
                   ))}
                 </ul>
@@ -257,7 +307,8 @@ const CSVImportModal: React.FC = () => {
                 <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
                   {importResult.warnings.map((warning, i) => (
                     <li key={i}>
-                      <span className="font-mono">{warning.sessionDate}:</span> {warning.message}
+                      <span className="font-mono">{warning.sessionDate}:</span>{' '}
+                      {warning.message}
                     </li>
                   ))}
                 </ul>
@@ -269,10 +320,12 @@ const CSVImportModal: React.FC = () => {
                 <h3 className="font-semibold text-nb-green mb-2">Data Found</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="font-semibold">Sessions:</span> {importResult.sessionsImported}
+                    <span className="font-semibold">Sessions:</span>{' '}
+                    {importResult.sessionsImported}
                   </div>
                   <div>
-                    <span className="font-semibold">Players:</span> {importResult.playersImported}
+                    <span className="font-semibold">Players:</span>{' '}
+                    {importResult.playersImported}
                   </div>
                 </div>
               </div>
@@ -288,19 +341,14 @@ const CSVImportModal: React.FC = () => {
                 </button>
               )}
 
-              {(importResult.errors.length > 0 || importResult.warnings.length > 0) && (
-                <button
-                  onClick={handleDownloadErrorLog}
-                  className="btn-nb"
-                >
+              {(importResult.errors.length > 0 ||
+                importResult.warnings.length > 0) && (
+                <button onClick={handleDownloadErrorLog} className="btn-nb">
                   Download Error Log
                 </button>
               )}
 
-              <button
-                onClick={resetState}
-                className="btn-nb"
-              >
+              <button onClick={resetState} className="btn-nb">
                 Select Different File
               </button>
 

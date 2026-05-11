@@ -17,86 +17,99 @@ import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 
 const GoogleAuthButton: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(state => state.ui);
-  const { players } = useAppSelector(state => state.players);
+  const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(
+    (state) => state.ui,
+  );
+  const { players } = useAppSelector((state) => state.players);
 
   const [showDropdown, setShowDropdown] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
-  const hasInitialized = useRef(false);
   const autoReconnectAttempted = useRef(false);
+  const hasInitialized = useRef(false);
 
   // Promise resolver for mid-session re-auth
   const reauthResolverRef = useRef<((success: boolean) => void) | null>(null);
 
   // Helper function to sync from spreadsheet
-  const syncFromSpreadsheet = async (spreadsheetId: string, existingPlayers: typeof players = []) => {
-    try {
-      const spreadsheetData = await googleDriveService.getSpreadsheetData(spreadsheetId);
-      const parsedResult = parseSpreadsheetData(spreadsheetData);
+  const syncFromSpreadsheet = useCallback(
+    async (spreadsheetId: string, existingPlayers: typeof players = []) => {
+      try {
+        const spreadsheetData =
+          await googleDriveService.getSpreadsheetData(spreadsheetId);
+        const parsedResult = parseSpreadsheetData(spreadsheetData);
 
-      // Remap player IDs to match existing players
-      const result = remapPlayerIds(parsedResult, existingPlayers);
+        // Remap player IDs to match existing players
+        const result = remapPlayerIds(parsedResult, existingPlayers);
 
-      // Replace all data with spreadsheet data
-      dispatch(mergePlayers(result.players));
-      dispatch(replaceImportedSessions({
-        sessions: result.sessions,
-        playerSessions: result.playerSessions,
-      }));
+        // Replace all data with spreadsheet data
+        dispatch(mergePlayers(result.players));
+        dispatch(
+          replaceImportedSessions({
+            sessions: result.sessions,
+            playerSessions: result.playerSessions,
+          }),
+        );
 
-      dispatch(setSyncStatus({
-        lastSyncTime: new Date().toISOString(),
-        hasUnsyncedChanges: false,
-        error: null,
-      }));
-    } catch (error) {
-      console.error('Error syncing from spreadsheet:', error);
-      // Don't throw - just log the error, user can manually sync later
-    }
-  };
+        dispatch(
+          setSyncStatus({
+            lastSyncTime: new Date().toISOString(),
+            hasUnsyncedChanges: false,
+            error: null,
+          }),
+        );
+      } catch (error) {
+        console.error('Error syncing from spreadsheet:', error);
+        // Don't throw - just log the error, user can manually sync later
+      }
+    },
+    [dispatch],
+  );
 
   // Handle successful login
-  const handleLoginSuccess = useCallback(async (accessToken: string, isReauth: boolean = false) => {
-    try {
-      dispatch(setLoading(true));
-      googleDriveService.setAccessToken(accessToken);
-      dispatch(setGoogleConnected(true));
-      setNeedsReauth(false);
-      setIsAutoReconnecting(false);
+  const handleLoginSuccess = useCallback(
+    async (accessToken: string, isReauth: boolean = false) => {
+      try {
+        dispatch(setLoading(true));
+        googleDriveService.setAccessToken(accessToken);
+        dispatch(setGoogleConnected(true));
+        setNeedsReauth(false);
+        setIsAutoReconnecting(false);
 
-      // Fetch and store user info
-      const userInfo = await googleDriveService.fetchUserInfo();
-      dispatch(setGoogleUser(userInfo));
+        // Fetch and store user info
+        const userInfo = await googleDriveService.fetchUserInfo();
+        dispatch(setGoogleUser(userInfo));
 
-      // Check if there's a linked spreadsheet and auto-sync from it
-      const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
-      if (spreadsheetId) {
-        dispatch(setImportedSpreadsheetId(spreadsheetId));
-        // Only sync from spreadsheet on initial login, not re-auth
-        // (re-auth happens mid-session, we don't want to overwrite local state)
-        if (!isReauth) {
-          await syncFromSpreadsheet(spreadsheetId, players);
+        // Check if there's a linked spreadsheet and auto-sync from it
+        const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
+        if (spreadsheetId) {
+          dispatch(setImportedSpreadsheetId(spreadsheetId));
+          // Only sync from spreadsheet on initial login, not re-auth
+          // (re-auth happens mid-session, we don't want to overwrite local state)
+          if (!isReauth) {
+            await syncFromSpreadsheet(spreadsheetId, players);
+          }
         }
-      }
 
-      // Resolve re-auth promise if pending
-      if (reauthResolverRef.current) {
-        reauthResolverRef.current(true);
-        reauthResolverRef.current = null;
+        // Resolve re-auth promise if pending
+        if (reauthResolverRef.current) {
+          reauthResolverRef.current(true);
+          reauthResolverRef.current = null;
+        }
+      } catch (error) {
+        console.error('Error connecting to Google Drive:', error);
+        dispatch(setError('Failed to connect to Google Drive'));
+        // Resolve re-auth promise with failure
+        if (reauthResolverRef.current) {
+          reauthResolverRef.current(false);
+          reauthResolverRef.current = null;
+        }
+      } finally {
+        dispatch(setLoading(false));
       }
-    } catch (error) {
-      console.error('Error connecting to Google Drive:', error);
-      dispatch(setError('Failed to connect to Google Drive'));
-      // Resolve re-auth promise with failure
-      if (reauthResolverRef.current) {
-        reauthResolverRef.current(false);
-        reauthResolverRef.current = null;
-      }
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [dispatch, players]);
+    },
+    [dispatch, players],
+  );
 
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
@@ -179,7 +192,12 @@ const GoogleAuthButton: React.FC = () => {
 
   // Auto-trigger reconnection when needed (after component mounts and login is available)
   useEffect(() => {
-    if (needsReauth && googleUser && !isAutoReconnecting && !autoReconnectAttempted.current) {
+    if (
+      needsReauth &&
+      googleUser &&
+      !isAutoReconnecting &&
+      !autoReconnectAttempted.current
+    ) {
       // Auto-trigger reconnection with the user's email as hint
       autoReconnectAttempted.current = true;
       setIsAutoReconnecting(true);
@@ -221,11 +239,13 @@ const GoogleAuthButton: React.FC = () => {
     dispatch(setGoogleConnected(false));
     dispatch(setGoogleUser(null));
     dispatch(setImportedSpreadsheetId(null));
-    dispatch(setSyncStatus({
-      lastSyncTime: null,
-      hasUnsyncedChanges: false,
-      error: null,
-    }));
+    dispatch(
+      setSyncStatus({
+        lastSyncTime: null,
+        hasUnsyncedChanges: false,
+        error: null,
+      }),
+    );
     setShowDropdown(false);
     setNeedsReauth(false);
   };
@@ -303,7 +323,10 @@ const GoogleAuthButton: React.FC = () => {
                 boxShadow: '4px 4px 0px 0px var(--color-shadow)',
               }}
             >
-              <div className="p-4 border-b-3" style={{ borderColor: 'var(--color-border)' }}>
+              <div
+                className="p-4 border-b-3"
+                style={{ borderColor: 'var(--color-border)' }}
+              >
                 <div className="flex items-center gap-3">
                   <img
                     src={googleUser.picture}
@@ -314,7 +337,9 @@ const GoogleAuthButton: React.FC = () => {
                   />
                   <div className="overflow-hidden">
                     <p className="font-semibold truncate">{googleUser.name}</p>
-                    <p className="text-sm text-theme-secondary truncate">{googleUser.email}</p>
+                    <p className="text-sm text-theme-secondary truncate">
+                      {googleUser.email}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -334,10 +359,7 @@ const GoogleAuthButton: React.FC = () => {
   }
 
   return (
-    <button
-      onClick={() => login()}
-      className="btn-nb bg-nb-green text-sm"
-    >
+    <button onClick={() => login()} className="btn-nb bg-nb-green text-sm">
       Connect Google Drive
     </button>
   );

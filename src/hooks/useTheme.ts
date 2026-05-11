@@ -8,25 +8,33 @@ const THEME_STORAGE_KEY = 'poker-tracker-theme';
 
 export function useTheme() {
   const dispatch = useAppDispatch();
-  const theme = useAppSelector(state => state.ui.theme);
+  const theme = useAppSelector((state) => state.ui.theme);
 
   // Get the actual theme to apply (resolving 'system' to light/dark)
-  const getResolvedTheme = useCallback((themeValue: Theme): 'light' | 'dark' => {
-    if (themeValue === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return themeValue;
-  }, []);
+  const getResolvedTheme = useCallback(
+    (themeValue: Theme): 'light' | 'dark' => {
+      if (themeValue === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light';
+      }
+      return themeValue;
+    },
+    [],
+  );
 
   // Apply theme to document
-  const applyTheme = useCallback((themeValue: Theme) => {
-    const resolved = getResolvedTheme(themeValue);
-    if (resolved === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [getResolvedTheme]);
+  const applyTheme = useCallback(
+    (themeValue: Theme) => {
+      const resolved = getResolvedTheme(themeValue);
+      if (resolved === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    },
+    [getResolvedTheme],
+  );
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -59,14 +67,18 @@ export function useTheme() {
 
   // Toggle function to cycle through themes
   const toggleTheme = useCallback(() => {
-    const nextTheme: Theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
+    const nextTheme: Theme =
+      theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
     dispatch(setTheme(nextTheme));
   }, [theme, dispatch]);
 
   // Set a specific theme
-  const setThemeValue = useCallback((newTheme: Theme) => {
-    dispatch(setTheme(newTheme));
-  }, [dispatch]);
+  const setThemeValue = useCallback(
+    (newTheme: Theme) => {
+      dispatch(setTheme(newTheme));
+    },
+    [dispatch],
+  );
 
   return {
     theme,

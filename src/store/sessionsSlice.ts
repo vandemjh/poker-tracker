@@ -24,13 +24,16 @@ const sessionsSlice = createSlice({
     setPlayerSessions: (state, action: PayloadAction<PlayerSession[]>) => {
       state.playerSessions = action.payload;
     },
-    createSession: (state, action: PayloadAction<{
-      name?: string;
-      date: string;
-      gameType: 'cash' | 'tournament';
-      stakes?: string;
-      location?: string;
-    }>) => {
+    createSession: (
+      state,
+      action: PayloadAction<{
+        name?: string;
+        date: string;
+        gameType: 'cash' | 'tournament';
+        stakes?: string;
+        location?: string;
+      }>,
+    ) => {
       const now = new Date().toISOString();
       const newSession: Session = {
         id: uuidv4(),
@@ -50,14 +53,19 @@ const sessionsSlice = createSlice({
     setActiveSession: (state, action: PayloadAction<string | null>) => {
       state.activeSessionId = action.payload;
     },
-    addPlayerToSession: (state, action: PayloadAction<{
-      sessionId: string;
-      playerId: string;
-      buyInAmount: number;
-    }>) => {
+    addPlayerToSession: (
+      state,
+      action: PayloadAction<{
+        sessionId: string;
+        playerId: string;
+        buyInAmount: number;
+      }>,
+    ) => {
       // Check if player is already in this session
       const existingPlayerSession = state.playerSessions.find(
-        ps => ps.sessionId === action.payload.sessionId && ps.playerId === action.payload.playerId
+        (ps) =>
+          ps.sessionId === action.payload.sessionId &&
+          ps.playerId === action.payload.playerId,
       );
       if (existingPlayerSession) {
         // Player already in session, don't add duplicate
@@ -80,12 +88,15 @@ const sessionsSlice = createSlice({
       };
       state.playerSessions.push(playerSession);
     },
-    addBuyIn: (state, action: PayloadAction<{
-      playerSessionId: string;
-      amount: number;
-    }>) => {
+    addBuyIn: (
+      state,
+      action: PayloadAction<{
+        playerSessionId: string;
+        amount: number;
+      }>,
+    ) => {
       const playerSession = state.playerSessions.find(
-        ps => ps.id === action.payload.playerSessionId
+        (ps) => ps.id === action.payload.playerSessionId,
       );
       if (playerSession) {
         const buyIn: BuyIn = {
@@ -97,51 +108,66 @@ const sessionsSlice = createSlice({
 
         // Recalculate netResult if player has already cashed out
         if (playerSession.cashOut !== undefined) {
-          const totalBuyIns = playerSession.buyIns.reduce((sum, b) => sum + b.amount, 0);
+          const totalBuyIns = playerSession.buyIns.reduce(
+            (sum, b) => sum + b.amount,
+            0,
+          );
           playerSession.netResult = playerSession.cashOut - totalBuyIns;
         }
       }
     },
-    updateBuyIn: (state, action: PayloadAction<{
-      playerSessionId: string;
-      buyInId: string;
-      amount: number;
-    }>) => {
+    updateBuyIn: (
+      state,
+      action: PayloadAction<{
+        playerSessionId: string;
+        buyInId: string;
+        amount: number;
+      }>,
+    ) => {
       const playerSessionIndex = state.playerSessions.findIndex(
-        ps => ps.id === action.payload.playerSessionId
+        (ps) => ps.id === action.payload.playerSessionId,
       );
       if (playerSessionIndex !== -1) {
-        const updatedBuyIns = state.playerSessions[playerSessionIndex].buyIns.map(
-          b => b.id === action.payload.buyInId ? { ...b, amount: action.payload.amount } : b
+        const updatedBuyIns = state.playerSessions[
+          playerSessionIndex
+        ].buyIns.map((b) =>
+          b.id === action.payload.buyInId
+            ? { ...b, amount: action.payload.amount }
+            : b,
         );
         state.playerSessions[playerSessionIndex].buyIns = updatedBuyIns;
 
         // Recalculate netResult if player has already cashed out
         if (state.playerSessions[playerSessionIndex].cashOut !== undefined) {
-          const totalBuyIns = state.playerSessions[playerSessionIndex].buyIns.reduce(
-            (sum, b) => sum + b.amount,
-            0
-          );
+          const totalBuyIns = state.playerSessions[
+            playerSessionIndex
+          ].buyIns.reduce((sum, b) => sum + b.amount, 0);
           state.playerSessions[playerSessionIndex].netResult =
             state.playerSessions[playerSessionIndex].cashOut - totalBuyIns;
         }
       }
     },
-    setCashOut: (state, action: PayloadAction<{
-      playerSessionId: string;
-      amount: number;
-    }>) => {
+    setCashOut: (
+      state,
+      action: PayloadAction<{
+        playerSessionId: string;
+        amount: number;
+      }>,
+    ) => {
       const playerSession = state.playerSessions.find(
-        ps => ps.id === action.payload.playerSessionId
+        (ps) => ps.id === action.payload.playerSessionId,
       );
       if (playerSession) {
         playerSession.cashOut = action.payload.amount;
-        const totalBuyIns = playerSession.buyIns.reduce((sum, b) => sum + b.amount, 0);
+        const totalBuyIns = playerSession.buyIns.reduce(
+          (sum, b) => sum + b.amount,
+          0,
+        );
         playerSession.netResult = action.payload.amount - totalBuyIns;
       }
     },
     completeSession: (state, action: PayloadAction<string>) => {
-      const session = state.sessions.find(s => s.id === action.payload);
+      const session = state.sessions.find((s) => s.id === action.payload);
       if (session) {
         session.isComplete = true;
         session.updatedAt = new Date().toISOString();
@@ -151,14 +177,14 @@ const sessionsSlice = createSlice({
       }
     },
     resumeCompletedSession: (state, action: PayloadAction<string>) => {
-      const session = state.sessions.find(s => s.id === action.payload);
+      const session = state.sessions.find((s) => s.id === action.payload);
       if (session && session.isComplete && !session.isImported) {
         session.isComplete = false;
         session.updatedAt = new Date().toISOString();
         state.activeSessionId = session.id;
 
         // Reset all player cash-outs for this session
-        state.playerSessions.forEach(ps => {
+        state.playerSessions.forEach((ps) => {
           if (ps.sessionId === session.id) {
             ps.cashOut = undefined;
             ps.netResult = 0;
@@ -168,42 +194,48 @@ const sessionsSlice = createSlice({
     },
     deleteSession: (state, action: PayloadAction<string>) => {
       const sessionId = action.payload;
-      const session = state.sessions.find(s => s.id === sessionId);
+      const session = state.sessions.find((s) => s.id === sessionId);
 
       // Only allow deleting non-imported sessions
       if (session && !session.isImported) {
-        state.sessions = state.sessions.filter(s => s.id !== sessionId);
+        state.sessions = state.sessions.filter((s) => s.id !== sessionId);
         state.playerSessions = state.playerSessions.filter(
-          ps => ps.sessionId !== sessionId
+          (ps) => ps.sessionId !== sessionId,
         );
         if (state.activeSessionId === sessionId) {
           state.activeSessionId = null;
         }
       }
     },
-    importSessions: (state, action: PayloadAction<{
-      sessions: Session[];
-      playerSessions: PlayerSession[];
-    }>) => {
+    importSessions: (
+      state,
+      action: PayloadAction<{
+        sessions: Session[];
+        playerSessions: PlayerSession[];
+      }>,
+    ) => {
       // Add imported sessions
       state.sessions.push(...action.payload.sessions);
       state.playerSessions.push(...action.payload.playerSessions);
     },
-    replaceImportedSessions: (state, action: PayloadAction<{
-      sessions: Session[];
-      playerSessions: PlayerSession[];
-    }>) => {
+    replaceImportedSessions: (
+      state,
+      action: PayloadAction<{
+        sessions: Session[];
+        playerSessions: PlayerSession[];
+      }>,
+    ) => {
       // Remove all imported sessions and their player sessions
       const importedSessionIds = new Set(
-        state.sessions.filter(s => s.isImported).map(s => s.id)
+        state.sessions.filter((s) => s.isImported).map((s) => s.id),
       );
 
       // Keep only non-imported sessions
-      state.sessions = state.sessions.filter(s => !s.isImported);
+      state.sessions = state.sessions.filter((s) => !s.isImported);
 
       // Keep only player sessions from non-imported sessions
       state.playerSessions = state.playerSessions.filter(
-        ps => !importedSessionIds.has(ps.sessionId)
+        (ps) => !importedSessionIds.has(ps.sessionId),
       );
 
       // Add new imported sessions
@@ -211,13 +243,17 @@ const sessionsSlice = createSlice({
       state.playerSessions.push(...action.payload.playerSessions);
     },
     removePlayerFromSession: (state, action: PayloadAction<string>) => {
-      const playerSession = state.playerSessions.find(ps => ps.id === action.payload);
+      const playerSession = state.playerSessions.find(
+        (ps) => ps.id === action.payload,
+      );
       if (playerSession) {
-        const session = state.sessions.find(s => s.id === playerSession.sessionId);
+        const session = state.sessions.find(
+          (s) => s.id === playerSession.sessionId,
+        );
         // Only allow removing from non-imported, incomplete sessions
         if (session && !session.isImported && !session.isComplete) {
           state.playerSessions = state.playerSessions.filter(
-            ps => ps.id !== action.payload
+            (ps) => ps.id !== action.payload,
           );
         }
       }

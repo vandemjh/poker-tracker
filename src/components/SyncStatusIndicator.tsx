@@ -11,9 +11,10 @@ import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 
 const SyncStatusIndicator: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { players } = useAppSelector(state => state.players);
-  const { syncStatus, isGoogleConnected, importedSpreadsheetId } = useAppSelector(state => state.ui);
-  const { activeSessionId } = useAppSelector(state => state.sessions);
+  const { players } = useAppSelector((state) => state.players);
+  const { syncStatus, isGoogleConnected, importedSpreadsheetId } =
+    useAppSelector((state) => state.ui);
+  const { activeSessionId } = useAppSelector((state) => state.sessions);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSyncingRef = useRef(false);
   const playersRef = useRef(players);
@@ -52,37 +53,47 @@ const SyncStatusIndicator: React.FC = () => {
       isSyncingRef.current = true;
 
       try {
-        dispatch(setSyncStatus({
-          ...syncStatus,
-          isSyncing: true,
-        }));
+        dispatch(
+          setSyncStatus({
+            ...syncStatus,
+            isSyncing: true,
+          }),
+        );
 
-        const spreadsheetData = await googleDriveService.getSpreadsheetData(importedSpreadsheetId);
+        const spreadsheetData = await googleDriveService.getSpreadsheetData(
+          importedSpreadsheetId,
+        );
         const parsedResult = parseSpreadsheetData(spreadsheetData);
 
         // Remap player IDs to match existing players
         const result = remapPlayerIds(parsedResult, playersRef.current);
 
         dispatch(mergePlayers(result.players));
-        dispatch(replaceImportedSessions({
-          sessions: result.sessions,
-          playerSessions: result.playerSessions,
-        }));
+        dispatch(
+          replaceImportedSessions({
+            sessions: result.sessions,
+            playerSessions: result.playerSessions,
+          }),
+        );
 
         dispatch(clearUnsyncedChanges());
-        dispatch(setSyncStatus({
-          lastSyncTime: new Date().toISOString(),
-          hasUnsyncedChanges: false,
-          isSyncing: false,
-          error: null,
-        }));
+        dispatch(
+          setSyncStatus({
+            lastSyncTime: new Date().toISOString(),
+            hasUnsyncedChanges: false,
+            isSyncing: false,
+            error: null,
+          }),
+        );
       } catch (error) {
         console.error('Auto-sync error:', error);
-        dispatch(setSyncStatus({
-          ...syncStatus,
-          isSyncing: false,
-          error: `Auto-sync failed: ${error}`,
-        }));
+        dispatch(
+          setSyncStatus({
+            ...syncStatus,
+            isSyncing: false,
+            error: `Auto-sync failed: ${error}`,
+          }),
+        );
       } finally {
         isSyncingRef.current = false;
       }
@@ -93,7 +104,13 @@ const SyncStatusIndicator: React.FC = () => {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [dispatch, isGoogleConnected, importedSpreadsheetId, syncStatus.hasUnsyncedChanges, activeSessionId]);
+  }, [
+    dispatch,
+    isGoogleConnected,
+    importedSpreadsheetId,
+    syncStatus.hasUnsyncedChanges,
+    activeSessionId,
+  ]);
 
   // Not connected to Google
   if (!isGoogleConnected) {
@@ -125,7 +142,10 @@ const SyncStatusIndicator: React.FC = () => {
   // Sync error
   if (syncStatus.error) {
     return (
-      <span className="badge-nb bg-nb-red text-nb-white text-xs" title={syncStatus.error}>
+      <span
+        className="badge-nb bg-nb-red text-nb-white text-xs"
+        title={syncStatus.error}
+      >
         Sync Error
       </span>
     );
@@ -142,9 +162,7 @@ const SyncStatusIndicator: React.FC = () => {
 
   // All synced
   return (
-    <span className="badge-nb bg-nb-green text-nb-black text-xs">
-      Synced
-    </span>
+    <span className="badge-nb bg-nb-green text-nb-black text-xs">Synced</span>
   );
 };
 

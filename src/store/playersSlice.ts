@@ -20,7 +20,7 @@ const playersSlice = createSlice({
     addPlayer: (state, action: PayloadAction<{ name: string }>) => {
       // Check if player with this name already exists (case-insensitive)
       const existingPlayer = state.players.find(
-        p => p.name.toLowerCase() === action.payload.name.toLowerCase()
+        (p) => p.name.toLowerCase() === action.payload.name.toLowerCase(),
       );
       if (existingPlayer) {
         // Player already exists, don't add duplicate
@@ -36,28 +36,33 @@ const playersSlice = createSlice({
       };
       state.players.push(newPlayer);
     },
-    updatePlayer: (state, action: PayloadAction<{ id: string; name: string }>) => {
-      const player = state.players.find(p => p.id === action.payload.id);
+    updatePlayer: (
+      state,
+      action: PayloadAction<{ id: string; name: string }>,
+    ) => {
+      const player = state.players.find((p) => p.id === action.payload.id);
       if (player) {
         player.name = action.payload.name;
         player.updatedAt = new Date().toISOString();
       }
     },
     deletePlayer: (state, action: PayloadAction<string>) => {
-      state.players = state.players.filter(p => p.id !== action.payload);
+      state.players = state.players.filter((p) => p.id !== action.payload);
     },
     importPlayers: (state, action: PayloadAction<Player[]>) => {
       // Add players that don't already exist (by name)
-      const existingNames = new Set(state.players.map(p => p.name.toLowerCase()));
+      const existingNames = new Set(
+        state.players.map((p) => p.name.toLowerCase()),
+      );
       const newPlayers = action.payload.filter(
-        p => !existingNames.has(p.name.toLowerCase())
+        (p) => !existingNames.has(p.name.toLowerCase()),
       );
       state.players.push(...newPlayers);
     },
     mergePlayers: (state, action: PayloadAction<Player[]>) => {
       // Merge incoming players with existing ones, preserving existing IDs
       const existingByName = new Map(
-        state.players.map(p => [p.name.toLowerCase(), p])
+        state.players.map((p) => [p.name.toLowerCase(), p]),
       );
 
       const mergedPlayers: Player[] = [];
@@ -90,5 +95,12 @@ const playersSlice = createSlice({
   },
 });
 
-export const { setPlayers, addPlayer, updatePlayer, deletePlayer, importPlayers, mergePlayers } = playersSlice.actions;
+export const {
+  setPlayers,
+  addPlayer,
+  updatePlayer,
+  deletePlayer,
+  importPlayers,
+  mergePlayers,
+} = playersSlice.actions;
 export default playersSlice.reducer;

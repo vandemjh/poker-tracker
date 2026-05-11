@@ -23,7 +23,7 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
 );
 
 // Neo-brutalist color palette for chart lines
@@ -53,7 +53,7 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
   const tooltipBg = isDark ? '#1e293b' : '#000000';
   const tooltipBorder = isDark ? '#475569' : '#000000';
 
-  if (data.length === 0 || data.every(d => d.balanceHistory.length === 0)) {
+  if (data.length === 0 || data.every((d) => d.balanceHistory.length === 0)) {
     return (
       <div className="h-full flex items-center justify-center text-theme-secondary">
         No balance history data available
@@ -63,17 +63,17 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
 
   // Get all unique dates across all players and sort them
   const allDates = new Set<string>();
-  data.forEach(player => {
-    player.balanceHistory.forEach(entry => {
+  data.forEach((player) => {
+    player.balanceHistory.forEach((entry) => {
       allDates.add(entry.date);
     });
   });
   const sortedDates = Array.from(allDates).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    (a, b) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   // Create labels from dates
-  const labels = sortedDates.map(date => formatDateShort(date));
+  const labels = sortedDates.map((date) => formatDateShort(date));
 
   // Create dataset for each player
   const datasets = data.map((player, index) => {
@@ -81,13 +81,13 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
 
     // Create a map of date to balance for this player
     const balanceMap = new Map<string, number>();
-    player.balanceHistory.forEach(entry => {
+    player.balanceHistory.forEach((entry) => {
       balanceMap.set(entry.date, entry.balance);
     });
 
     // Fill in data points, carrying forward the last known balance
     let lastBalance = 0;
-    const dataPoints = sortedDates.map(date => {
+    const dataPoints = sortedDates.map((date) => {
       if (balanceMap.has(date)) {
         lastBalance = balanceMap.get(date)!;
       }
@@ -97,7 +97,7 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
 
     // For a continuous line, we need to fill gaps
     // Find first and last non-null indices
-    let firstIndex = dataPoints.findIndex(d => d !== null);
+    let firstIndex = dataPoints.findIndex((d) => d !== null);
     let lastIndex = dataPoints.length - 1;
     for (let i = dataPoints.length - 1; i >= 0; i--) {
       if (dataPoints[i] !== null) {
