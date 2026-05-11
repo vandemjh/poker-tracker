@@ -17,6 +17,7 @@ import {
   replaceImportedSessions,
   clearUnsyncedChanges,
   setSyncStatus,
+  updateBuyIn,
 } from '../store';
 import { formatMoney, formatMoneyWithSign, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
@@ -47,9 +48,14 @@ const PlayPage: React.FC = () => {
 
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showBuyInModal, setShowBuyInModal] = useState<string | null>(null);
+  const [showEditBuyInModal, setShowEditBuyInModal] = useState<{
+    playerSessionId: string;
+    buyInId: string;
+  } | null>(null);
   const [showCashOutModal, setShowCashOutModal] = useState<string | null>(null);
   const [buyInAmount, setBuyInAmount] = useState('');
   const [cashOutAmount, setCashOutAmount] = useState('');
+  const [editBuyInAmount, setEditBuyInAmount] = useState('');
   const [isSavingToSheet, setIsSavingToSheet] = useState(false);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [isSyncingInProgress, setIsSyncingInProgress] = useState(false);
@@ -506,6 +512,19 @@ const PlayPage: React.FC = () => {
     setShowBuyInModal(null);
   };
 
+  const handleUpdateBuyIn = (playerSessionId: string, buyInId: string) => {
+    const amount = parseFloat(editBuyInAmount);
+    if (!isNaN(amount) && amount > 0) {
+      dispatch(updateBuyIn({ playerSessionId, buyInId, amount }));
+      dispatch(markUnsyncedChanges());
+      // Sync to spreadsheet after updating buy-in
+      suspendPolling();
+      setTimeout(() => syncInProgressToSheet(), 100);
+    }
+    setEditBuyInAmount('');
+    setShowEditBuyInModal(null);
+  };
+
   const handleCashOut = (playerSessionId: string) => {
     const amount = parseFloat(cashOutAmount);
     if (!isNaN(amount) && amount >= 0) {
@@ -628,11 +647,6 @@ const PlayPage: React.FC = () => {
     return player?.name || 'Unknown';
   };
 
-  const availablePlayers = useMemo(() => {
-    const usedPlayerIds = new Set(activePlayerSessions.map(ps => ps.playerId));
-    return players.filter(p => !usedPlayerIds.has(p.id));
-  }, [players, activePlayerSessions]);
-
   // Calculate games played per player for sorting
   const playerGameCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -642,15 +656,6 @@ const PlayPage: React.FC = () => {
     });
     return counts;
   }, [players, playerSessions]);
-
-  // Sort available players by games played (descending)
-  const sortedAvailablePlayers = useMemo(() => {
-    return [...availablePlayers].sort((a, b) => {
-      const countA = playerGameCounts.get(a.id) || 0;
-      const countB = playerGameCounts.get(b.id) || 0;
-      return countB - countA;
-    });
-  }, [availablePlayers, playerGameCounts]);
 
   // Sort ALL players by games played (descending)
   const sortedAllPlayers = useMemo(() => {
@@ -941,7 +946,15 @@ const PlayPage: React.FC = () => {
                     <td className="px-2 py-2 md:px-4 md:py-3">
                       <div className="flex flex-wrap gap-1 items-center">
                         {ps.buyIns.map((buyIn) => (
-                          <span key={buyIn.id} className="badge-nb bg-nb-blue text-nb-white text-xs px-2 py-0.5">
+                          <span
+                            key={buyIn.id}
+                            className="badge-nb bg-nb-blue text-nb-white text-xs px-2 py-0.5 cursor-pointer hover:bg-nb-yellow transition-colors"
+                            onClick={() => {
+                              setEditBuyInAmount(buyIn.amount.toString());
+                              setShowEditBuyInModal({ playerSessionId: ps.id, buyInId: buyIn.id });
+                            }}
+                            title="Click to edit"
+                          >
                             {formatMoney(buyIn.amount)}
                           </span>
                         ))}
@@ -1099,44 +1112,92 @@ const PlayPage: React.FC = () => {
       )}
 
       {/* Buy-in Modal */}
-      {showBuyInModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
-          <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
-            <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Add Buy-in</h3>
-            <div className="space-y-3 sm:space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-1">Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={buyInAmount}
-                  onChange={e => setBuyInAmount(e.target.value)}
-                  className="input-nb py-2 sm:py-3"
-                  autoFocus
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => handleAddBuyIn(showBuyInModal)}
-                  className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
-                >
-                  Add
-                </button>
-                <button
-                  onClick={() => {
-                    setShowBuyInModal(null);
-                    setBuyInAmount('');
-                  }}
-                  className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+       {showBuyInModal && (
+         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+           <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+             <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Add Buy-in</h3>
+             <div className="space-y-3 sm:space-y-4">
+               <div>
+                 <label className="block text-sm font-semibold mb-1">Amount</label>
+                 <input
+                   type="number"
+                   step="0.01"
+                   inputMode="decimal"
+                   value={buyInAmount}
+                   onChange={e => setBuyInAmount(e.target.value)}
+                   className="input-nb py-2 sm:py-3"
+                   autoFocus
+                 />
+               </div>
+               <div className="flex gap-3 pt-2">
+                 <button
+                   onClick={() => handleAddBuyIn(showBuyInModal)}
+                   className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                 >
+                   Add
+                 </button>
+                 <button
+                   onClick={() => {
+                     setShowBuyInModal(null);
+                     setBuyInAmount('');
+                   }}
+                   className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                 >
+                   Cancel
+                 </button>
+               </div>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Edit Buy-in Modal */}
+       {showEditBuyInModal && (() => {
+         const currentPlayerSession = activePlayerSessions.find(ps => ps.id === showEditBuyInModal.playerSessionId);
+         const playerName = currentPlayerSession ? getPlayerName(currentPlayerSession.playerId || '') : '';
+
+         return (
+           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+             <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+               <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Edit Buy-in</h3>
+               {playerName && (
+                 <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">Player: {playerName}</p>
+               )}
+               <div className="space-y-3 sm:space-y-4">
+                 <div>
+                   <label className="block text-sm font-semibold mb-1">Amount</label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     inputMode="decimal"
+                     value={editBuyInAmount}
+                     onChange={e => setEditBuyInAmount(e.target.value)}
+                     className="input-nb py-2 sm:py-3"
+                     autoFocus
+                   />
+                 </div>
+                 <div className="flex gap-3 pt-2">
+                   <button
+                     onClick={() => handleUpdateBuyIn(showEditBuyInModal.playerSessionId, showEditBuyInModal.buyInId)}
+                     className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                   >
+                     Update
+                   </button>
+                   <button
+                     onClick={() => {
+                       setShowEditBuyInModal(null);
+                       setEditBuyInAmount('');
+                     }}
+                     className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                   >
+                     Cancel
+                   </button>
+                 </div>
+               </div>
+             </div>
+           </div>
+         );
+       })()}
 
       {/* Cash-out Modal */}
       {showCashOutModal && (() => {

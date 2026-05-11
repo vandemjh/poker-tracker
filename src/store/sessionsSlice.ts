@@ -102,6 +102,31 @@ const sessionsSlice = createSlice({
         }
       }
     },
+    updateBuyIn: (state, action: PayloadAction<{
+      playerSessionId: string;
+      buyInId: string;
+      amount: number;
+    }>) => {
+      const playerSessionIndex = state.playerSessions.findIndex(
+        ps => ps.id === action.payload.playerSessionId
+      );
+      if (playerSessionIndex !== -1) {
+        const updatedBuyIns = state.playerSessions[playerSessionIndex].buyIns.map(
+          b => b.id === action.payload.buyInId ? { ...b, amount: action.payload.amount } : b
+        );
+        state.playerSessions[playerSessionIndex].buyIns = updatedBuyIns;
+
+        // Recalculate netResult if player has already cashed out
+        if (state.playerSessions[playerSessionIndex].cashOut !== undefined) {
+          const totalBuyIns = state.playerSessions[playerSessionIndex].buyIns.reduce(
+            (sum, b) => sum + b.amount,
+            0
+          );
+          state.playerSessions[playerSessionIndex].netResult =
+            state.playerSessions[playerSessionIndex].cashOut - totalBuyIns;
+        }
+      }
+    },
     setCashOut: (state, action: PayloadAction<{
       playerSessionId: string;
       amount: number;
@@ -207,6 +232,7 @@ export const {
   setActiveSession,
   addPlayerToSession,
   addBuyIn,
+  updateBuyIn,
   setCashOut,
   completeSession,
   resumeCompletedSession,
