@@ -28,6 +28,7 @@ const ResultsPage: React.FC = () => {
   const [showAllGames, setShowAllGames] = useState(false);
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
+  const [recentGamesCount, setRecentGamesCount] = useState(5);
 
   const statistics = useMemo(() => {
     return calculateAllPlayerStatistics(players, sessions, playerSessions, dateFilter);
@@ -125,13 +126,19 @@ const ResultsPage: React.FC = () => {
     return allDates.size;
   }, [chartData]);
 
+  // Total completed sessions count
+  const totalCompletedSessions = useMemo(() => {
+    return [...sessions].filter(s => s.isComplete).length;
+  }, [sessions]);
+
   // Recent games data for the Recent Games component
   const recentGamesData = useMemo(() => {
     // Get all completed sessions sorted by date (most recent first)
-    const recentSessions = [...sessions]
+    const allCompletedSessions = [...sessions]
       .filter(s => s.isComplete)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 20);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const recentSessions = allCompletedSessions.slice(0, recentGamesCount);
 
     return recentSessions.map(session => {
       // Get player results for this session
@@ -148,8 +155,12 @@ const ResultsPage: React.FC = () => {
         })
         .sort((a, b) => b.netResult - a.netResult);
 
-      const winners = results.filter(r => r.netResult > 0);
-      const losers = results.filter(r => r.netResult < 0);
+      const winners = results
+        .filter(r => r.netResult > 0)
+        .sort((a, b) => b.netResult - a.netResult);
+      const losers = results
+        .filter(r => r.netResult < 0)
+        .sort((a, b) => b.netResult - a.netResult);
 
       return {
         session,
@@ -158,7 +169,7 @@ const ResultsPage: React.FC = () => {
         losers,
       };
     });
-  }, [sessions, playerSessions, players]);
+  }, [sessions, playerSessions, players, recentGamesCount]);
 
   const getSortIcon = (column: string) => {
     if (sortColumn !== column) return '↕';
@@ -351,11 +362,12 @@ const ResultsPage: React.FC = () => {
       {/* Recent Games */}
       <div className="card-nb">
         <h2 className="mb-4">Recent Games</h2>
-        {recentGamesData.length === 0 ? (
+        {recentGamesData.length === 0 && (
           <p className="text-theme-secondary text-center py-4">
             No completed games yet.
           </p>
-        ) : (
+        )}
+        {recentGamesData.length > 0 && (
           <div className="space-y-2">
             {recentGamesData.map(({ session, results, winners, losers }) => (
               <div
@@ -419,6 +431,20 @@ const ResultsPage: React.FC = () => {
                 </div>
               </div>
             ))}
+            {recentGamesData.length > 0 && recentGamesData.length < totalCompletedSessions && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={() => setRecentGamesCount(prev => prev + 5)}
+                  className="px-6 py-2 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100"
+                  style={{
+                    borderColor: 'var(--color-border)',
+                    boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+                  }}
+                >
+                  Load 5 More
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

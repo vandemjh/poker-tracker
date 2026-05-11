@@ -17,7 +17,16 @@ const Layout: React.FC = () => {
   const { activeSessionId } = useAppSelector(state => state.sessions);
   const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(state => state.ui);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isSettingsActive = location.pathname === '/settings';
+
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(prev => !prev);
+  }, []);
+
+  const closeMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen(false);
+  }, []);
 
   // Initialize theme
   useTheme();
@@ -96,9 +105,21 @@ const Layout: React.FC = () => {
                 🃏
               </button>
               <SyncStatusIndicator />
+              <button
+                onClick={toggleMobileMenu}
+                className="md:hidden w-10 h-10 flex items-center justify-center border-3 transition-all duration-100 hover:translate-x-[1px] hover:translate-y-[1px]"
+                style={{
+                  borderColor: 'var(--color-border)',
+                  backgroundColor: 'var(--color-bg-card)',
+                  boxShadow: '2px 2px 0px 0px var(--color-shadow)',
+                }}
+                title="Menu"
+              >
+                <span className="text-xl">☰</span>
+              </button>
             </div>
 
-            <nav className="flex flex-wrap items-center gap-3">
+            <nav className="hidden md:flex flex-wrap items-center gap-3">
               <NavLink
                 to="/"
                 className={({ isActive }) => navButtonClass(isActive)}
@@ -160,6 +181,35 @@ const Layout: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {isMobileMenuOpen && (
+        <div className="md:hidden border-b-4" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border)' }}>
+          <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-3">
+            <NavLink to="/" className={({ isActive }) => navButtonClass(isActive)} style={({ isActive }) => navButtonStyle(isActive)} end onClick={closeMobileMenu}>
+              Results
+            </NavLink>
+            <NavLink to="/play" className={({ isActive }) => navButtonClass(isActive)} style={({ isActive }) => navButtonStyle(isActive)} onClick={closeMobileMenu}>
+              Play
+            </NavLink>
+            {importedSpreadsheetId ? (
+              <button onClick={() => { handleManualSync(); closeMobileMenu(); }} disabled={isSyncing || !isGoogleConnected} className={`px-4 py-2 font-semibold border-3 bg-nb-green text-nb-black transition-all duration-100 min-w-[80px] text-center ${isSyncing ? 'opacity-50 cursor-wait' : ''}`} style={{ borderColor: 'var(--color-border)', boxShadow: '4px 4px 0px 0px var(--color-shadow)' }}>
+                {isSyncing ? 'Syncing...' : 'Sync'}
+              </button>
+            ) : (
+              <button onClick={() => { dispatch(toggleImportModal()); closeMobileMenu(); }} className="px-4 py-2 font-semibold border-3 bg-nb-blue text-nb-white transition-all duration-100 min-w-[80px] text-center" style={{ borderColor: 'var(--color-border)', boxShadow: '4px 4px 0px 0px var(--color-shadow)' }}>
+                Link
+              </button>
+            )}
+            <button onClick={() => { navigate('/settings'); closeMobileMenu(); }} className={`w-10 h-10 flex items-center justify-center border-3 transition-all duration-100 ${isSettingsActive ? 'bg-nb-yellow text-nb-black translate-x-[2px] translate-y-[2px]' : 'hover:translate-x-[1px] hover:translate-y-[1px]'}`} style={{ borderColor: 'var(--color-border)', backgroundColor: isSettingsActive ? undefined : 'var(--color-bg-card)', boxShadow: isSettingsActive ? '0px 0px 0px 0px var(--color-shadow)' : '2px 2px 0px 0px var(--color-shadow)' }} title="Settings">
+              <span className="text-lg">⚙️</span>
+            </button>
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <GoogleAuthButton />
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
         <Outlet />
