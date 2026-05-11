@@ -13,6 +13,7 @@ import {
   formatMoney,
   formatMoneyWithSign,
   formatPercentage,
+  parseLocalDate,
 } from '../utils/statistics';
 import BalanceChart from '../components/BalanceChart';
 import type { PlayerStatistics } from '../types';
@@ -422,7 +423,7 @@ const ResultsPage: React.FC = () => {
               >
                 <div className="mb-2">
                   <div className="font-semibold text-lg">
-                    {new Date(session.date).toLocaleDateString(undefined, {
+                    {parseLocalDate(session.date).toLocaleDateString(undefined, {
                       weekday: 'short',
                       year: 'numeric',
                       month: 'short',

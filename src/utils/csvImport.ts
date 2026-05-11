@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { v4 as uuidv4 } from 'uuid';
+import { getLocalDateString, parseLocalDate } from './statistics';
 import type {
   Player,
   Session,
@@ -175,7 +176,7 @@ export function parseCSV(csvContent: string): ParsedCSVData {
   dateColumns.forEach(({ date }) => {
     const session: Session = {
       id: uuidv4(),
-      date: date.toISOString(),
+      date: getLocalDateString(date),
       gameType: 'cash',
       isComplete: true,
       isImported: true,
@@ -250,14 +251,14 @@ export function parseCSV(csvContent: string): ParsedCSVData {
   sessions.forEach((session) => {
     const total = sessionTotals.get(session.id) || 0;
     if (Math.abs(total) > 0.01) {
-      const formattedDate = new Date(session.date).toLocaleDateString('en-US', {
+      const formattedDate = parseLocalDate(session.date).toLocaleDateString('en-US', {
         month: 'numeric',
         day: 'numeric',
         year: 'numeric',
       });
       warnings.push({
         sessionDate: formattedDate,
-        message: `Session does not sum to zero. Difference: $${total.toFixed(2)}`,
+        message: `Session does not sum to zero. Difference: ${total.toFixed(2)}`,
       });
     }
   });
@@ -352,7 +353,7 @@ export function parseSpreadsheetData(
   dateColumns.forEach(({ date }) => {
     const session: Session = {
       id: uuidv4(),
-      date: date.toISOString(),
+      date: getLocalDateString(date),
       gameType: 'cash',
       isComplete: true,
       isImported: true,
@@ -434,14 +435,14 @@ export function parseSpreadsheetData(
   sessions.forEach((session) => {
     const total = sessionTotals.get(session.id) || 0;
     if (Math.abs(total) > 0.01) {
-      const formattedDate = new Date(session.date).toLocaleDateString('en-US', {
+      const formattedDate = parseLocalDate(session.date).toLocaleDateString('en-US', {
         month: 'numeric',
         day: 'numeric',
         year: 'numeric',
       });
       warnings.push({
         sessionDate: formattedDate,
-        message: `Session does not sum to zero. Difference: $${total.toFixed(2)}`,
+        message: `Session does not sum to zero. Difference: ${total.toFixed(2)}`,
       });
     }
   });

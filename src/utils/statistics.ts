@@ -6,6 +6,16 @@ import type {
   BalanceHistoryEntry,
 } from '../types';
 
+export function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function getLocalDateString(date?: Date): string {
+  const d = date ?? new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function calculatePlayerStatistics(
   player: Player,
   sessions: Session[],
@@ -23,14 +33,14 @@ export function calculatePlayerStatistics(
     relevantPlayerSessions = relevantPlayerSessions.filter((ps) => {
       const session = sessionMap.get(ps.sessionId);
       if (!session) return false;
-      const sessionDate = new Date(session.date);
+      const sessionDate = parseLocalDate(session.date);
       if (
         dateFilter.startDate &&
-        sessionDate < new Date(dateFilter.startDate)
+        sessionDate < parseLocalDate(dateFilter.startDate)
       ) {
         return false;
       }
-      if (dateFilter.endDate && sessionDate > new Date(dateFilter.endDate)) {
+      if (dateFilter.endDate && sessionDate > parseLocalDate(dateFilter.endDate)) {
         return false;
       }
       return true;
@@ -211,7 +221,7 @@ export function formatPercentage(value: number): string {
 }
 
 export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -220,7 +230,7 @@ export function formatDate(dateString: string): string {
 }
 
 export function formatDateShort(dateString: string): string {
-  const date = new Date(dateString);
+  const date = parseLocalDate(dateString);
   return date.toLocaleDateString('en-US', {
     month: 'numeric',
     day: 'numeric',

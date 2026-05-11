@@ -28,6 +28,8 @@ import {
 import {
   formatMoney,
   formatMoneyWithSign,
+  getLocalDateString,
+  parseLocalDate,
   validateZeroSum,
 } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
@@ -176,7 +178,7 @@ const PlayPage: React.FC = () => {
       setIsSyncingInProgress(true);
       await googleDriveService.updateInProgressSession(
         importedSpreadsheetId,
-        new Date(activeSession.date),
+        parseLocalDate(activeSession.date),
         playerData,
       );
       lastSyncedDataRef.current = dataHash;
@@ -208,7 +210,7 @@ const PlayPage: React.FC = () => {
       // Create a session with the remote game's date
       dispatch(
         createSession({
-          date: remoteGame.date.toISOString().split('T')[0],
+          date: getLocalDateString(remoteGame.date),
           gameType: 'cash',
         }),
       );
@@ -524,7 +526,7 @@ const PlayPage: React.FC = () => {
     reset: resetSession,
   } = useForm<CreateSessionForm>({
     defaultValues: {
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       gameType: 'cash',
     },
   });
@@ -689,7 +691,7 @@ const PlayPage: React.FC = () => {
         setIsSavingToSheet(true);
 
         // Get session date
-        const sessionDate = new Date(activeSession.date);
+        const sessionDate = parseLocalDate(activeSession.date);
 
         // Note: We do NOT clear the "In Progress" sheet here.
         // It stays populated until the user starts a NEW game,
@@ -935,7 +937,7 @@ const PlayPage: React.FC = () => {
                 >
                   <div className="font-semibold text-sm md:text-base">
                     {session.name ||
-                      new Date(session.date).toLocaleDateString()}
+                      parseLocalDate(session.date).toLocaleDateString()}
                   </div>
                   <div className="text-xs md:text-sm text-theme-secondary">
                     {session.stakes && `${session.stakes}`}
@@ -1027,7 +1029,7 @@ const PlayPage: React.FC = () => {
           <div className="min-w-0">
             <h2 className="text-lg sm:text-2xl break-words leading-tight">
               {activeSession.name ||
-                new Date(activeSession.date).toLocaleDateString('en-US', {
+                parseLocalDate(activeSession.date).toLocaleDateString('en-US', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
