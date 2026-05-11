@@ -149,7 +149,7 @@
 
   /* Neo-brutalist badge */
   .badge-nb {
-    @apply inline-flex items-center px-3 py-1 text-sm font-semibold border-2;
+    @apply inline-flex items-center px-2 py-0.5 md:px-3 md:py-1 text-xs md:text-sm font-semibold border-2;
     border-color: var(--color-border);
   }
 
@@ -157,19 +157,34 @@
   .table-nb {
     @apply w-full border-collapse border-3;
     border-color: var(--color-border);
+    min-width: 600px;
   }
 
   .table-nb th {
-    @apply px-4 py-3 text-left font-semibold border-b-3;
+    @apply px-2 py-2 md:px-4 md:py-3 text-left font-semibold border-b-3;
     background-color: var(--color-table-header-bg);
     color: var(--color-table-header-text);
     border-color: var(--color-border);
+    font-size: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .table-nb th {
+      font-size: 0.875rem;
+    }
   }
 
   .table-nb td {
-    @apply px-4 py-3 border-b-2 transition-colors duration-200;
+    @apply px-2 py-2 md:px-4 md:py-3 border-b-2 transition-colors duration-200;
     background-color: var(--color-bg-card);
     border-color: var(--color-border);
+    font-size: 0.875rem;
+  }
+
+  @media (min-width: 768px) {
+    .table-nb td {
+      font-size: 1rem;
+    }
   }
 
   .table-nb tr:hover td {

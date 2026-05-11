@@ -666,19 +666,157 @@ const PlayPage: React.FC = () => {
     const canStartSession = isGoogleConnected && importedSpreadsheetId;
 
     return (
-      <div className="space-y-6">
+     <div className="space-y-4 md:space-y-6">
         {!canStartSession && (
-          <div className="card-nb bg-nb-orange">
-            <div className="flex items-center gap-4">
-              <div className="text-4xl">📊</div>
+          <div className="card-nb bg-nb-orange p-3 md:p-6">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="text-3xl md:text-4xl">📊</div>
               <div>
-                <h3 className="text-nb-black">Link a Google Sheet to get started</h3>
-                <p className="text-sm text-nb-black opacity-80">
+                <h3 className="text-base md:text-lg text-nb-black">Link a Google Sheet to get started</h3>
+                <p className="text-xs md:text-sm text-nb-black opacity-80">
                   {!isGoogleConnected
                     ? 'Connect to Google Drive and link a spreadsheet to track your games.'
                     : 'Click the "Link" button in the header to connect a Google Sheet.'}
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        <div className={`card-nb md:p-6 p-3 ${!canStartSession ? 'opacity-50 pointer-events-none' : ''}`}>
+          <h2 className="mb-4 md:mb-6 text-lg md:text-2xl">Start New Session</h2>
+          <form onSubmit={handleSessionSubmit(onCreateSession)} className="space-y-3 md:space-y-4">
+            <div className="space-y-3 md:space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1">Date</label>
+                <input type="date" {...registerSession('date')} className="input-nb py-2 md:py-3" required />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOptionalFields(!showOptionalFields)}
+                className="flex items-center gap-2 text-sm font-semibold text-theme-secondary hover:text-theme transition-colors"
+              >
+                <span className={`transform transition-transform ${showOptionalFields ? 'rotate-90' : ''}`}>▶</span>
+                Optional Details
+              </button>
+
+              {showOptionalFields && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 pl-4 border-l-3" style={{ borderColor: 'var(--color-border)' }}>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Session Name</label>
+                    <input
+                      {...registerSession('name')}
+                      className="input-nb py-2 md:py-3"
+                      placeholder="e.g., Friday Night Game"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Stakes</label>
+                    <input
+                      {...registerSession('stakes')}
+                      className="input-nb py-2 md:py-3"
+                      placeholder="e.g., $1/$2"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold mb-1">Location</label>
+                    <input
+                      {...registerSession('location')}
+                      className="input-nb py-2 md:py-3"
+                      placeholder="e.g., John's House"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <button type="submit" className="btn-nb-primary text-sm py-2 px-4 md:text-base md:py-3 md:px-6" disabled={!canStartSession}>
+              Start Session
+            </button>
+          </form>
+        </div>
+
+        {incompleteSessions.length > 0 && canStartSession && (
+          <div className="card-nb md:p-6 p-3">
+            <h2 className="mb-3 md:mb-4 text-base md:text-2xl">Resume Session</h2>
+            <div className="space-y-2">
+              {incompleteSessions.map(session => (
+                <button
+                  key={session.id}
+                  onClick={() => dispatch(setActiveSession(session.id))}
+                  className="w-full text-left p-3 md:p-4 border-3 hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                  style={{
+                    backgroundColor: 'var(--color-bg-card)',
+                    borderColor: 'var(--color-border)',
+                    boxShadow: '2px 2px 0px 0px var(--color-shadow)',
+                  }}
+                >
+                  <div className="font-semibold text-sm md:text-base">
+                    {session.name || new Date(session.date).toLocaleDateString()}
+                  </div>
+                  <div className="text-xs md:text-sm text-theme-secondary">
+                    {session.stakes && `${session.stakes}`}
+                    {session.stakes && session.location && ' @ '}
+                    {!session.stakes && session.location && '@ '}
+                    {session.location}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Resume accidentally ended game */}
+        {lastCompletedSession && canStartSession && (
+          <div className="card-nb md:p-6 p-3 bg-nb-orange bg-opacity-20">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+              <div>
+                <h3 className="font-semibold text-sm md:text-base text-nb-black dark:text-theme">Accidentally ended a game?</h3>
+                <p className="text-xs md:text-sm text-theme-secondary break-words">
+                  Resume "{lastCompletedSession.name || new Date(lastCompletedSession.date).toLocaleDateString()}"
+                  (ended {new Date(lastCompletedSession.updatedAt).toLocaleString()})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  dispatch(resumeCompletedSession(lastCompletedSession.id));
+                  dispatch(markUnsyncedChanges());
+
+                  try {
+                    const savedJson = localStorage.getItem(SAVED_SESSION_KEY);
+                    if (savedJson) {
+                      const savedData: SavedSessionData = JSON.parse(savedJson);
+                      if (savedData.sessionId === lastCompletedSession.id) {
+                        const state = (window as any).__REDUX_STORE__?.getState?.();
+                        if (state) {
+                          const currentPlayerSessions = state.sessions.playerSessions.filter(
+                            (ps: any) => ps.sessionId === lastCompletedSession.id
+                          );
+
+                          savedData.playerSessions.forEach(saved => {
+                            if (saved.cashOut !== undefined) {
+                              const matchingPs = currentPlayerSessions.find(
+                                (ps: any) => ps.playerId === saved.playerId
+                              );
+                              if (matchingPs) {
+                                dispatch(setCashOut({
+                                  playerSessionId: matchingPs.id,
+                                  amount: saved.cashOut,
+                                }));
+                              }
+                            }
+                          });
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Error restoring session data:', e);
+                  }
+                }}
+                className="btn-nb bg-nb-orange text-nb-black whitespace-nowrap text-sm py-2 px-4 md:text-base md:py-3 md:px-6"
+              >
+                Resume Game
+              </button>
             </div>
           </div>
         )}
@@ -832,10 +970,10 @@ const PlayPage: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Session Header */}
-      <div className="card-nb">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2>
+      <div className="card-nb md:p-6 p-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-2xl break-words leading-tight">
               {activeSession.name ||
                 new Date(activeSession.date).toLocaleDateString('en-US', {
                   weekday: 'long',
@@ -845,7 +983,7 @@ const PlayPage: React.FC = () => {
                 })}
             </h2>
             {(activeSession.stakes || activeSession.location) && (
-              <p className="text-theme-secondary">
+              <p className="text-sm text-theme-secondary break-words">
                 {activeSession.stakes}
                 {activeSession.stakes && activeSession.location && ' @ '}
                 {!activeSession.stakes && activeSession.location && '@ '}
@@ -856,7 +994,7 @@ const PlayPage: React.FC = () => {
           <button
             onClick={handleEndSession}
             disabled={isSavingToSheet}
-            className={`btn-nb-danger ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
+            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
           >
             {isSavingToSheet ? 'Saving...' : 'End Session'}
           </button>
@@ -864,36 +1002,36 @@ const PlayPage: React.FC = () => {
       </div>
 
       {/* Table Total */}
-      <div className="card-nb bg-nb-yellow text-nb-black">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold text-nb-black">Total on Table</div>
-            <div className="text-3xl font-bold text-nb-black">{formatMoney(tableTotal)}</div>
+      <div className="card-nb bg-nb-yellow text-nb-black p-3 md:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
+          <div className="sm:flex-1">
+            <div className="text-xs sm:text-sm font-semibold text-nb-black">Total on Table</div>
+            <div className="text-2xl sm:text-3xl font-bold text-nb-black">{formatMoney(tableTotal)}</div>
           </div>
           {cashOutTotal > 0 && (
-            <div className="text-center">
-              <div className="text-sm font-semibold text-nb-black">Cashed Out</div>
-              <div className="text-2xl font-bold text-nb-black">{formatMoney(cashOutTotal)}</div>
-            </div>
-          )}
-          {cashOutTotal > 0 && (
-            <div className="text-right">
-              <div className="text-sm font-semibold text-nb-black">Difference</div>
-              <div className={`text-2xl font-bold ${
-                cashOutTotal - tableTotal === 0
-                  ? 'text-nb-green'
-                  : 'text-nb-red'
-              }`}>
-                {formatMoneyWithSign(cashOutTotal - tableTotal)}
+            <>
+              <div className="text-center sm:text-left">
+                <div className="text-xs sm:text-sm font-semibold text-nb-black">Cashed Out</div>
+                <div className="text-xl sm:text-2xl font-bold text-nb-black">{formatMoney(cashOutTotal)}</div>
               </div>
-            </div>
+              <div className="text-center sm:text-right">
+                <div className="text-xs sm:text-sm font-semibold text-nb-black">Difference</div>
+                <div className={`text-xl sm:text-2xl font-bold ${
+                  cashOutTotal - tableTotal === 0
+                    ? 'text-nb-green'
+                    : 'text-nb-red'
+                }`}>
+                  {formatMoneyWithSign(cashOutTotal - tableTotal)}
+                </div>
+              </div>
+            </>
           )}
           <button
             onClick={() => {
               setPlayerValue('buyInAmount', settings.defaultBuyIn);
               setShowAddPlayer(true);
             }}
-            className="btn-nb text-nb-black"
+            className="btn-nb text-nb-black text-sm py-2 px-4 whitespace-nowrap"
             style={{ backgroundColor: '#FFFFFF' }}
           >
             + Add Player
@@ -902,21 +1040,21 @@ const PlayPage: React.FC = () => {
       </div>
 
       {/* Players List */}
-      <div className="card-nb overflow-x-auto">
-        <h3 className="mb-4">Players</h3>
+      <div className="card-nb md:p-6 p-3 overflow-x-auto">
+        <h3 className="mb-3 md:mb-4 text-base md:text-xl">Players</h3>
         {activePlayerSessions.length === 0 ? (
-          <p className="text-theme-secondary text-center py-8">
+          <p className="text-theme-secondary text-center py-8 text-sm">
             No players yet. Add a player to get started.
           </p>
         ) : (
-          <table className="table-nb">
+          <table className="table-nb text-sm">
             <thead>
               <tr>
-                <th>Player</th>
-                <th>Buy-ins</th>
-                <th>Cash-out</th>
-                <th>P/L</th>
-                <th>Actions</th>
+                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">Player</th>
+                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">Buy-ins</th>
+                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">Cash-out</th>
+                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">P/L</th>
+                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -926,11 +1064,11 @@ const PlayPage: React.FC = () => {
 
                 return (
                   <tr key={ps.id}>
-                    <td className="font-semibold">{getPlayerName(ps.playerId)}</td>
-                    <td>
+                    <td className="px-2 py-2 md:px-4 md:py-3 font-semibold whitespace-nowrap">{getPlayerName(ps.playerId)}</td>
+                    <td className="px-2 py-2 md:px-4 md:py-3">
                       <div className="flex flex-wrap gap-1 items-center">
                         {ps.buyIns.map((buyIn) => (
-                          <span key={buyIn.id} className="badge-nb bg-nb-blue text-nb-white text-xs">
+                          <span key={buyIn.id} className="badge-nb bg-nb-blue text-nb-white text-xs px-2 py-0.5">
                             {formatMoney(buyIn.amount)}
                           </span>
                         ))}
@@ -939,24 +1077,24 @@ const PlayPage: React.FC = () => {
                             setBuyInAmount(settings.defaultBuyIn.toString());
                             setShowBuyInModal(ps.id);
                           }}
-                          className="w-6 h-6 flex items-center justify-center border-2 text-xs font-bold hover:bg-nb-yellow"
+                          className="w-5 h-5 md:w-6 md:h-6 flex items-center justify-center border-2 text-xs font-bold hover:bg-nb-yellow flex-shrink-0"
                           style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-card)' }}
                         >
                           +
                         </button>
                       </div>
-                      <div className="text-sm text-theme-secondary mt-1">
+                      <div className="text-xs text-theme-secondary mt-1">
                         Total: {formatMoney(totalBuyIns)}
                       </div>
                     </td>
-                    <td>
+                    <td className="px-2 py-2 md:px-4 md:py-3 whitespace-nowrap">
                       {ps.cashOut !== undefined ? (
                         <button
                           onClick={() => {
                             setCashOutAmount(ps.cashOut!.toString());
                             setShowCashOutModal(ps.id);
                           }}
-                          className="font-semibold hover:text-nb-blue hover:underline cursor-pointer"
+                          className="font-semibold hover:text-nb-blue hover:underline cursor-pointer text-sm"
                           title="Click to edit"
                         >
                           {formatMoney(ps.cashOut)}
@@ -964,36 +1102,35 @@ const PlayPage: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => setShowCashOutModal(ps.id)}
-                          className="btn-nb text-sm py-1 px-3"
+                          className="btn-nb text-xs py-1 px-2"
                         >
                           Cash Out
                         </button>
                       )}
                     </td>
-                    <td>
+                    <td className="px-2 py-2 md:px-4 md:py-3 whitespace-nowrap">
                       {netResult !== null ? (
                         <span
-                          className={`font-bold ${
+                          className={`font-bold text-sm ${
                             netResult >= 0 ? 'status-positive' : 'status-negative'
                           }`}
                         >
                           {formatMoneyWithSign(netResult)}
                         </span>
                       ) : (
-                        <span className="text-theme-secondary">-</span>
+                        <span className="text-theme-secondary text-sm">-</span>
                       )}
                     </td>
-                    <td>
+                    <td className="px-2 py-2 md:px-4 md:py-3">
                       {ps.cashOut === undefined && (
                         <button
                           onClick={() => {
                             dispatch(removePlayerFromSession(ps.id));
                             dispatch(markUnsyncedChanges());
-                            // Sync to spreadsheet after removing player
                             suspendPolling();
                             setTimeout(() => syncInProgressToSheet(), 100);
                           }}
-                          className="text-nb-red hover:underline text-sm"
+                          className="text-nb-red hover:underline text-xs md:text-sm"
                         >
                           Remove
                         </button>
@@ -1009,10 +1146,10 @@ const PlayPage: React.FC = () => {
 
       {/* Add Player Modal */}
       {showAddPlayer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="card-nb w-full max-w-md mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3>Add Player</h3>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+          <div className="card-nb w-full max-w-md mx-0 sm:mx-4 p-3 sm:p-6">
+            <div className="flex justify-between items-center mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-xl">Add Player</h3>
               <button
                 onClick={() => {
                   setShowAddPlayer(false);
@@ -1024,10 +1161,10 @@ const PlayPage: React.FC = () => {
                 X
               </button>
             </div>
-            <form onSubmit={handlePlayerSubmit(onAddPlayer)} className="space-y-4">
+            <form onSubmit={handlePlayerSubmit(onAddPlayer)} className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Player</label>
-                <select {...registerPlayer('playerId')} className="select-nb" required>
+                <select {...registerPlayer('playerId')} className="select-nb py-2 sm:py-3" required>
                   <option value="">Select a player</option>
                   {sortedAvailablePlayers.map(p => {
                     const gameCount = playerGameCounts.get(p.id) || 0;
@@ -1045,7 +1182,7 @@ const PlayPage: React.FC = () => {
                   <label className="block text-sm font-semibold mb-1">New Player Name</label>
                   <input
                     {...registerPlayer('newPlayerName')}
-                    className="input-nb"
+                    className="input-nb py-2 sm:py-3"
                     placeholder="Enter name"
                     required
                   />
@@ -1058,12 +1195,12 @@ const PlayPage: React.FC = () => {
                   step="0.01"
                   inputMode="decimal"
                   {...registerPlayer('buyInAmount', { valueAsNumber: true })}
-                  className="input-nb"
+                  className="input-nb py-2 sm:py-3"
                   required
                 />
               </div>
-              <div className="flex gap-3">
-                <button type="submit" className="btn-nb-success">
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6">
                   Add Player
                 </button>
                 <button
@@ -1072,7 +1209,7 @@ const PlayPage: React.FC = () => {
                     setShowAddPlayer(false);
                     resetPlayer();
                   }}
-                  className="btn-nb"
+                  className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                 >
                   Cancel
                 </button>
@@ -1084,10 +1221,10 @@ const PlayPage: React.FC = () => {
 
       {/* Buy-in Modal */}
       {showBuyInModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="card-nb w-full max-w-sm mx-4">
-            <h3 className="mb-4">Add Buy-in</h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+          <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+            <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Add Buy-in</h3>
+            <div className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Amount</label>
                 <input
@@ -1096,14 +1233,14 @@ const PlayPage: React.FC = () => {
                   inputMode="decimal"
                   value={buyInAmount}
                   onChange={e => setBuyInAmount(e.target.value)}
-                  className="input-nb"
+                  className="input-nb py-2 sm:py-3"
                   autoFocus
                 />
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => handleAddBuyIn(showBuyInModal)}
-                  className="btn-nb-success"
+                  className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                 >
                   Add
                 </button>
@@ -1112,7 +1249,7 @@ const PlayPage: React.FC = () => {
                     setShowBuyInModal(null);
                     setBuyInAmount('');
                   }}
-                  className="btn-nb"
+                  className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                 >
                   Cancel
                 </button>
@@ -1129,13 +1266,13 @@ const PlayPage: React.FC = () => {
         const playerName = getPlayerName(currentPlayerSession?.playerId || '');
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="card-nb w-full max-w-sm mx-4">
-              <h3 className="mb-4">{isEditing ? 'Edit Cash Out' : 'Cash Out'}</h3>
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+            <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+              <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">{isEditing ? 'Edit Cash Out' : 'Cash Out'}</h3>
               {playerName && (
-                <p className="text-sm text-theme-secondary mb-4">Player: {playerName}</p>
+                <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">Player: {playerName}</p>
               )}
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-sm font-semibold mb-1">Amount</label>
                   <input
@@ -1144,14 +1281,14 @@ const PlayPage: React.FC = () => {
                     inputMode="decimal"
                     value={cashOutAmount}
                     onChange={e => setCashOutAmount(e.target.value)}
-                    className="input-nb"
+                    className="input-nb py-2 sm:py-3"
                     autoFocus
                   />
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-2">
                   <button
                     onClick={() => handleCashOut(showCashOutModal)}
-                    className="btn-nb-success"
+                    className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                   >
                     {isEditing ? 'Update' : 'Confirm'}
                   </button>
@@ -1160,7 +1297,7 @@ const PlayPage: React.FC = () => {
                       setShowCashOutModal(null);
                       setCashOutAmount('');
                     }}
-                    className="btn-nb"
+                    className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                   >
                     Cancel
                   </button>
@@ -1173,17 +1310,19 @@ const PlayPage: React.FC = () => {
 
       {/* Join In-Progress Game Modal */}
       {showJoinGameModal && remoteInProgressGame && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="card-nb w-full max-w-md mx-4">
-            <h3 className="mb-4">In-Progress Game Found</h3>
-            <p className="text-theme-secondary mb-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+          <div className="card-nb w-full max-w-md mx-0 sm:mx-4 p-3 sm:p-6">
+            <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">In-Progress Game Found</h3>
+            <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
               There's an in-progress game from {remoteInProgressGame.date.toLocaleDateString()} with {remoteInProgressGame.players.length} player{remoteInProgressGame.players.length !== 1 ? 's' : ''}.
             </p>
-            <div className="text-sm mb-4 max-h-32 overflow-y-auto">
+            <div className="text-xs sm:text-sm mb-3 sm:mb-4 max-h-32 overflow-y-auto">
               {remoteInProgressGame.players.map((p, i) => (
                 <div key={i} className="flex justify-between py-1 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span>{p.playerName}</span>
-                  <span>Buy-in: {formatMoney(p.totalBuyIn)}{p.cashOut !== undefined && ` | Cash-out: ${formatMoney(p.cashOut)}`}</span>
+                  <span className="font-semibold">{p.playerName}</span>
+                  <span className="whitespace-nowrap ml-2">
+                    {formatMoney(p.totalBuyIn)}{p.cashOut !== undefined && ` / ${formatMoney(p.cashOut)}`}
+                  </span>
                 </div>
               ))}
             </div>
@@ -1194,7 +1333,7 @@ const PlayPage: React.FC = () => {
                   setShowJoinGameModal(false);
                   setRemoteInProgressGame(null);
                 }}
-                className="btn-nb-success"
+                className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
               >
                 Continue Game
               </button>
@@ -1203,7 +1342,7 @@ const PlayPage: React.FC = () => {
                   setShowJoinGameModal(false);
                   setRemoteInProgressGame(null);
                 }}
-                className="btn-nb"
+                className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
               >
                 Dismiss
               </button>

@@ -127,10 +127,9 @@ const ResultsPage: React.FC = () => {
 
   // Recent games data for the Recent Games component
   const recentGamesData = useMemo(() => {
-    // Get completed imported sessions sorted by date (most recent first)
-    // Only show imported sessions since spreadsheet is source of truth
+    // Get all completed sessions sorted by date (most recent first)
     const recentSessions = [...sessions]
-      .filter(s => s.isComplete && s.isImported)
+      .filter(s => s.isComplete)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 20);
 
