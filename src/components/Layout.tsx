@@ -13,6 +13,7 @@ import SyncStatusIndicator from './SyncStatusIndicator';
 import ThemeToggle from './ThemeToggle';
 import { googleDriveService } from '../services/googleDrive';
 import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import { useGoogleAuth } from '../hooks/useGoogleAuth';
 
 const Layout: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -26,6 +27,8 @@ const Layout: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isSettingsActive = location.pathname === '/settings';
+
+  const auth = useGoogleAuth();
 
   const toggleMobileMenu = useCallback(() => {
     setIsMobileMenuOpen((prev) => !prev);
@@ -195,7 +198,18 @@ const Layout: React.FC = () => {
                 <span className="text-lg">⚙️</span>
               </button>
               <ThemeToggle />
-              <GoogleAuthButton />
+              <GoogleAuthButton
+                isInitializing={auth.isInitializing}
+                isGoogleConnected={auth.isGoogleConnected}
+                googleUser={auth.googleUser}
+                needsReauth={auth.needsReauth}
+                isAutoReconnecting={auth.isAutoReconnecting}
+                showDropdown={auth.showDropdown}
+                onToggleDropdown={() => auth.setShowDropdown(!auth.showDropdown)}
+                onLogin={auth.login}
+                onLoginWithHint={auth.loginWithHint}
+                onLogout={auth.handleLogout}
+              />
             </nav>
           </div>
         </div>
@@ -278,6 +292,18 @@ const Layout: React.FC = () => {
                 <span className="text-lg">⚙️</span>
               </button>
               <ThemeToggle />
+              <GoogleAuthButton
+                isInitializing={auth.isInitializing}
+                isGoogleConnected={auth.isGoogleConnected}
+                googleUser={auth.googleUser}
+                needsReauth={auth.needsReauth}
+                isAutoReconnecting={auth.isAutoReconnecting}
+                showDropdown={auth.showDropdown}
+                onToggleDropdown={() => auth.setShowDropdown(!auth.showDropdown)}
+                onLogin={auth.login}
+                onLoginWithHint={auth.loginWithHint}
+                onLogout={auth.handleLogout}
+              />
             </div>
           </div>
         </div>

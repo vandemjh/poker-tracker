@@ -1,256 +1,30 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useGoogleLogin, googleLogout } from '@react-oauth/google';
-import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector';
-import {
-  setGoogleConnected,
-  setGoogleUser,
-  setSyncStatus,
-  setLoading,
-  setError,
-  mergePlayers,
-  replaceImportedSessions,
-  setImportedSpreadsheetId,
-  setInitializing,
-} from '../store';
-import { googleDriveService, SCOPES } from '../services/googleDrive';
-import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import React from 'react';
 
-const GoogleAuthButton: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const { isGoogleConnected, googleUser, isInitializing } = useAppSelector(
-    (state) => state.ui,
-  );
-  const { players } = useAppSelector((state) => state.players);
+interface GoogleAuthButtonProps {
+  isInitializing: boolean;
+  isGoogleConnected: boolean;
+  googleUser: { picture: string; name: string; email: string } | null;
+  needsReauth: boolean;
+  isAutoReconnecting: boolean;
+  showDropdown: boolean;
+  onToggleDropdown: () => void;
+  onLogin: () => void;
+  onLoginWithHint: () => void;
+  onLogout: () => void;
+}
 
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [needsReauth, setNeedsReauth] = useState(false);
-  const [isAutoReconnecting, setIsAutoReconnecting] = useState(false);
-  const autoReconnectAttempted = useRef(false);
-  const hasInitialized = useRef(false);
-
-  // Promise resolver for mid-session re-auth
-  const reauthResolverRef = useRef<((success: boolean) => void) | null>(null);
-
-  // Helper function to sync from spreadsheet
-  const syncFromSpreadsheet = useCallback(
-    async (spreadsheetId: string, existingPlayers: typeof players = []) => {
-      try {
-        const spreadsheetData =
-          await googleDriveService.getSpreadsheetData(spreadsheetId);
-        const parsedResult = parseSpreadsheetData(spreadsheetData);
-
-        // Remap player IDs to match existing players
-        const result = remapPlayerIds(parsedResult, existingPlayers);
-
-        // Replace all data with spreadsheet data
-        dispatch(mergePlayers(result.players));
-        dispatch(
-          replaceImportedSessions({
-            sessions: result.sessions,
-            playerSessions: result.playerSessions,
-          }),
-        );
-
-        dispatch(
-          setSyncStatus({
-            lastSyncTime: new Date().toISOString(),
-            hasUnsyncedChanges: false,
-            error: null,
-          }),
-        );
-      } catch (error) {
-        console.error('Error syncing from spreadsheet:', error);
-        // Don't throw - just log the error, user can manually sync later
-      }
-    },
-    [dispatch],
-  );
-
-  // Handle successful login
-  const handleLoginSuccess = useCallback(
-    async (accessToken: string, isReauth: boolean = false) => {
-      try {
-        dispatch(setLoading(true));
-        googleDriveService.setAccessToken(accessToken);
-        dispatch(setGoogleConnected(true));
-        setNeedsReauth(false);
-        setIsAutoReconnecting(false);
-
-        // Fetch and store user info
-        const userInfo = await googleDriveService.fetchUserInfo();
-        dispatch(setGoogleUser(userInfo));
-
-        // Check if there's a linked spreadsheet and auto-sync from it
-        const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
-        if (spreadsheetId) {
-          dispatch(setImportedSpreadsheetId(spreadsheetId));
-          // Only sync from spreadsheet on initial login, not re-auth
-          // (re-auth happens mid-session, we don't want to overwrite local state)
-          if (!isReauth) {
-            await syncFromSpreadsheet(spreadsheetId, players);
-          }
-        }
-
-        // Resolve re-auth promise if pending
-        if (reauthResolverRef.current) {
-          reauthResolverRef.current(true);
-          reauthResolverRef.current = null;
-        }
-      } catch (error) {
-        console.error('Error connecting to Google Drive:', error);
-        dispatch(setError('Failed to connect to Google Drive'));
-        // Resolve re-auth promise with failure
-        if (reauthResolverRef.current) {
-          reauthResolverRef.current(false);
-          reauthResolverRef.current = null;
-        }
-      } finally {
-        dispatch(setLoading(false));
-      }
-    },
-    [dispatch, players],
-  );
-
-  const login = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      await handleLoginSuccess(tokenResponse.access_token);
-    },
-    onError: (error) => {
-      console.error('Google login error:', error);
-      setIsAutoReconnecting(false);
-      // Only show error if this wasn't a silent/auto reconnect attempt
-      if (!autoReconnectAttempted.current) {
-        dispatch(setError('Failed to sign in with Google'));
-      }
-      autoReconnectAttempted.current = false;
-    },
-    scope: SCOPES,
-  });
-
-  // Login with hint (for reconnection - pre-selects the user's account)
-  const loginWithHint = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      await handleLoginSuccess(tokenResponse.access_token, true);
-    },
-    onError: (error) => {
-      console.error('Google re-login error:', error);
-      setIsAutoReconnecting(false);
-      setNeedsReauth(true);
-      // Resolve re-auth promise with failure
-      if (reauthResolverRef.current) {
-        reauthResolverRef.current(false);
-        reauthResolverRef.current = null;
-      }
-    },
-    scope: SCOPES,
-    hint: googleUser?.email,
-  });
-
-  // Try to restore session on mount
-  useEffect(() => {
-    const restoreSession = async () => {
-      if (hasInitialized.current) return;
-      hasInitialized.current = true;
-
-      const storedToken = googleDriveService.getStoredToken();
-      const storedUser = googleDriveService.getStoredUser();
-      const storedSpreadsheetId = googleDriveService.getStoredSpreadsheetId();
-
-      // Always restore spreadsheet ID if we have one
-      if (storedSpreadsheetId) {
-        dispatch(setImportedSpreadsheetId(storedSpreadsheetId));
-      }
-
-      if (storedToken && storedUser) {
-        // Set the token
-        googleDriveService.setAccessToken(storedToken, false);
-
-        // Validate the token is still valid
-        const isValid = await googleDriveService.validateToken();
-
-        if (isValid) {
-          dispatch(setGoogleConnected(true));
-          dispatch(setGoogleUser(storedUser));
-
-          // Auto-sync from spreadsheet - spreadsheet is the source of truth
-          if (storedSpreadsheetId) {
-            await syncFromSpreadsheet(storedSpreadsheetId);
-          }
-        } else {
-          // Token expired but we have stored info
-          // Keep user info for display and auto-reconnect
-          dispatch(setGoogleUser(storedUser));
-          setNeedsReauth(true);
-        }
-      }
-
-      dispatch(setInitializing(false));
-    };
-
-    restoreSession();
-  }, [dispatch]); // Only run once on mount
-
-  // Auto-trigger reconnection when needed (after component mounts and login is available)
-  useEffect(() => {
-    if (
-      needsReauth &&
-      googleUser &&
-      !isAutoReconnecting &&
-      !autoReconnectAttempted.current
-    ) {
-      // Auto-trigger reconnection with the user's email as hint
-      autoReconnectAttempted.current = true;
-      setIsAutoReconnecting(true);
-      // Small delay to ensure the login hook is ready
-      setTimeout(() => {
-        loginWithHint();
-      }, 500);
-    }
-  }, [needsReauth, googleUser, isAutoReconnecting, loginWithHint]);
-
-  // Register re-auth callback with googleDriveService for mid-session token expiration
-  useEffect(() => {
-    const handleReauthRequired = (): Promise<boolean> => {
-      return new Promise((resolve) => {
-        // Store the resolver to be called when re-auth completes
-        reauthResolverRef.current = resolve;
-
-        // Trigger the login flow with hint (pre-selects user's account)
-        setIsAutoReconnecting(true);
-
-        // Small delay to ensure UI updates before triggering login
-        setTimeout(() => {
-          loginWithHint();
-        }, 100);
-      });
-    };
-
-    googleDriveService.setOnAuthRequired(handleReauthRequired);
-
-    // Cleanup on unmount
-    return () => {
-      googleDriveService.setOnAuthRequired(null);
-    };
-  }, [loginWithHint]);
-
-  const handleLogout = () => {
-    googleLogout();
-    googleDriveService.clearAccessToken();
-    dispatch(setGoogleConnected(false));
-    dispatch(setGoogleUser(null));
-    dispatch(setImportedSpreadsheetId(null));
-    dispatch(
-      setSyncStatus({
-        lastSyncTime: null,
-        hasUnsyncedChanges: false,
-        error: null,
-      }),
-    );
-    setShowDropdown(false);
-    setNeedsReauth(false);
-  };
-
-  // Show loading state while restoring or auto-reconnecting
+const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
+  isInitializing,
+  isGoogleConnected,
+  googleUser,
+  needsReauth,
+  isAutoReconnecting,
+  showDropdown,
+  onToggleDropdown,
+  onLogin,
+  onLoginWithHint,
+  onLogout,
+}) => {
   if (isInitializing || isAutoReconnecting) {
     return (
       <div className="flex items-center gap-2">
@@ -267,11 +41,10 @@ const GoogleAuthButton: React.FC = () => {
     );
   }
 
-  // Show reconnect button if token expired and auto-reconnect failed
   if (needsReauth && googleUser) {
     return (
       <button
-        onClick={() => loginWithHint()}
+        onClick={() => onLoginWithHint()}
         className="btn-nb bg-nb-orange text-nb-black text-sm flex items-center gap-2"
         title={`Reconnect as ${googleUser.name}`}
       >
@@ -290,7 +63,7 @@ const GoogleAuthButton: React.FC = () => {
     return (
       <div className="relative">
         <button
-          onClick={() => setShowDropdown(!showDropdown)}
+          onClick={onToggleDropdown}
           className="flex items-center gap-2 p-1 border-3 hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
           style={{
             borderColor: 'var(--color-border)',
@@ -308,13 +81,10 @@ const GoogleAuthButton: React.FC = () => {
 
         {showDropdown && (
           <>
-            {/* Backdrop to close dropdown */}
             <div
               className="fixed inset-0 z-40"
-              onClick={() => setShowDropdown(false)}
+              onClick={onToggleDropdown}
             />
-
-            {/* Dropdown menu */}
             <div
               className="absolute right-0 mt-2 w-64 border-3 z-50"
               style={{
@@ -345,7 +115,7 @@ const GoogleAuthButton: React.FC = () => {
               </div>
               <div className="p-2">
                 <button
-                  onClick={handleLogout}
+                  onClick={onLogout}
                   className="w-full text-left px-4 py-2 hover:bg-nb-red hover:text-nb-white transition-colors font-semibold"
                 >
                   Disconnect
@@ -359,7 +129,7 @@ const GoogleAuthButton: React.FC = () => {
   }
 
   return (
-    <button onClick={() => login()} className="btn-nb bg-nb-green text-sm">
+    <button onClick={onLogin} className="btn-nb bg-nb-green text-sm">
       Connect Google Drive
     </button>
   );
