@@ -37,7 +37,7 @@ import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
 import type { CreateSessionForm, AddPlayerToSessionForm } from '../types';
 
 // Polling interval for collaborative updates (in ms)
-const POLL_INTERVAL = 5000;
+const POLL_INTERVAL = 30000;
 
 // Helper to save session data to localStorage for resume feature
 const SAVED_SESSION_KEY = 'poker_tracker_saved_session';
@@ -85,6 +85,8 @@ const PlayPage: React.FC = () => {
   const isLoadingFromSpreadsheetRef = useRef(false);
   const lastLocalChangeTimeRef = useRef<number>(0);
   const isPollingSuspendedRef = useRef(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSyncingRef = useRef(false);
 
   // Suspend polling for a short time after local changes to avoid race conditions
   const suspendPolling = useCallback(() => {
@@ -174,7 +176,13 @@ const PlayPage: React.FC = () => {
       return;
     }
 
+    // Prevent concurrent syncs
+    if (isSyncingRef.current) {
+      return;
+    }
+
     try {
+      isSyncingRef.current = true;
       setIsSyncingInProgress(true);
       await googleDriveService.updateInProgressSession(
         importedSpreadsheetId,
@@ -182,13 +190,22 @@ const PlayPage: React.FC = () => {
         playerData,
       );
       lastSyncedDataRef.current = dataHash;
-      console.log('Synced in-progress game to spreadsheet');
+      dispatch(clearUnsyncedChanges());
+      dispatch(
+        setSyncStatus({
+          lastSyncTime: new Date().toISOString(),
+          hasUnsyncedChanges: false,
+          error: null,
+        }),
+      );
     } catch (error) {
       console.error('Error syncing in-progress game:', error);
     } finally {
+      isSyncingRef.current = false;
       setIsSyncingInProgress(false);
     }
   }, [
+    dispatch,
     isGoogleConnected,
     importedSpreadsheetId,
     activeSession,
@@ -197,6 +214,16 @@ const PlayPage: React.FC = () => {
     players,
     createNormalizedHash,
   ]);
+
+  // Debounced sync to avoid excessive API calls on rapid user actions
+  const debouncedSync = useCallback(() => {
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    syncTimeoutRef.current = setTimeout(() => {
+      syncInProgressToSheet();
+    }, 500);
+  }, [syncInProgressToSheet]);
 
   // Load game from spreadsheet's "In Progress" sheet (source of truth)
   const loadGameFromSpreadsheet = useCallback(
@@ -505,6 +532,10 @@ const PlayPage: React.FC = () => {
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
         }
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+          syncTimeoutRef.current = null;
+        }
       };
     }
   }, [
@@ -592,7 +623,7 @@ const PlayPage: React.FC = () => {
             );
             // Sync to spreadsheet after adding player
             suspendPolling();
-            setTimeout(() => syncInProgressToSheet(), 100);
+            debouncedSync();
           }
         }
       }, 0);
@@ -606,7 +637,7 @@ const PlayPage: React.FC = () => {
       );
       // Sync to spreadsheet after adding player
       suspendPolling();
-      setTimeout(() => syncInProgressToSheet(), 100);
+      debouncedSync();
     }
 
     dispatch(markUnsyncedChanges());
@@ -621,7 +652,7 @@ const PlayPage: React.FC = () => {
       dispatch(markUnsyncedChanges());
       // Sync to spreadsheet after adding buy-in
       suspendPolling();
-      setTimeout(() => syncInProgressToSheet(), 100);
+      debouncedSync();
     }
     setBuyInAmount('');
     setShowBuyInModal(null);
@@ -634,7 +665,7 @@ const PlayPage: React.FC = () => {
       dispatch(markUnsyncedChanges());
       // Sync to spreadsheet after updating buy-in
       suspendPolling();
-      setTimeout(() => syncInProgressToSheet(), 100);
+      debouncedSync();
     }
     setEditBuyInAmount('');
     setShowEditBuyInModal(null);
@@ -647,7 +678,7 @@ const PlayPage: React.FC = () => {
       dispatch(markUnsyncedChanges());
       // Sync to spreadsheet after cash out
       suspendPolling();
-      setTimeout(() => syncInProgressToSheet(), 100);
+      debouncedSync();
     }
     setCashOutAmount('');
     setShowCashOutModal(null);
@@ -1226,7 +1257,7 @@ const PlayPage: React.FC = () => {
                             dispatch(removePlayerFromSession(ps.id));
                             dispatch(markUnsyncedChanges());
                             suspendPolling();
-                            setTimeout(() => syncInProgressToSheet(), 100);
+                            debouncedSync();
                           }}
                           className="text-nb-red hover:underline text-xs md:text-sm"
                         >
