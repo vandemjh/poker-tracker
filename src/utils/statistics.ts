@@ -190,6 +190,49 @@ export function validateZeroSum(
   };
 }
 
+export interface SessionError {
+  session: Session;
+  difference: number;
+}
+
+export function findErrorSessions(
+  sessions: Session[],
+  playerSessions: PlayerSession[],
+  dateFilter?: { startDate: string | null; endDate: string | null },
+): SessionError[] {
+  let completedSessions = sessions.filter((s) => s.isComplete);
+
+  if (dateFilter?.startDate || dateFilter?.endDate) {
+    completedSessions = completedSessions.filter((session) => {
+      const sessionDate = parseLocalDate(session.date);
+      if (
+        dateFilter.startDate &&
+        sessionDate < parseLocalDate(dateFilter.startDate)
+      ) {
+        return false;
+      }
+      if (dateFilter.endDate && sessionDate > parseLocalDate(dateFilter.endDate)) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  const errors: SessionError[] = [];
+
+  for (const session of completedSessions) {
+    const { isValid, difference } = validateZeroSum(session.id, playerSessions);
+    if (!isValid) {
+      errors.push({ session, difference });
+    }
+  }
+
+  return errors.sort(
+    (a, b) =>
+      new Date(b.session.date).getTime() - new Date(a.session.date).getTime(),
+  );
+}
+
 export function formatMoney(amount: number): string {
   const absAmount = Math.abs(amount);
   const formatted = absAmount.toLocaleString('en-US', {

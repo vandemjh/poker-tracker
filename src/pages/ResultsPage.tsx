@@ -10,6 +10,7 @@ import {
 } from '../store';
 import {
   calculateAllPlayerStatistics,
+  findErrorSessions,
   formatMoney,
   formatMoneyWithSign,
   formatPercentage,
@@ -45,6 +46,14 @@ const ResultsPage: React.FC = () => {
       dateFilter,
     );
   }, [players, sessions, playerSessions, dateFilter]);
+
+  const errorSessions = useMemo(() => {
+    return findErrorSessions(sessions, playerSessions, dateFilter);
+  }, [sessions, playerSessions, dateFilter]);
+
+  const totalError = useMemo(() => {
+    return errorSessions.reduce((sum, e) => sum + e.difference, 0);
+  }, [errorSessions]);
 
   // Sort statistics by session count to get top 10 players
   const sortedByGames = useMemo(() => {
@@ -598,11 +607,63 @@ const ResultsPage: React.FC = () => {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
+         </tbody>
+         </table>
+       </div>
 
-export default ResultsPage;
+       {/* Errors Table */}
+       {errorSessions.length > 0 && (
+         <div className="card-nb overflow-x-auto">
+           <h2 className="mb-4">Errors</h2>
+            <table className="table-nb">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Game</th>
+                  <th>Error</th>
+                  <th>In Favor Of</th>
+                </tr>
+              </thead>
+              <tbody>
+                {errorSessions.map(({ session, difference }) => (
+                  <tr key={session.id}>
+                    <td className="font-semibold">
+                      {parseLocalDate(session.date).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </td>
+                    <td className="text-theme-secondary">
+                      {session.stakes && <span>{session.stakes} • </span>}
+                      {session.location || '—'}
+                    </td>
+                    <td className="status-negative">
+                      {formatMoneyWithSign(difference)}
+                    </td>
+                    <td className={difference > 0 ? 'status-positive' : 'status-negative'}>
+                      {difference > 0 ? 'Players' : 'Bank'}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={2} className="font-semibold">
+                    Total
+                  </td>
+                  <td className="font-semibold status-negative">
+                    {formatMoneyWithSign(totalError)}
+                  </td>
+                  <td className={totalError > 0 ? 'status-positive font-semibold' : 'status-negative font-semibold'}>
+                    {totalError > 0 ? 'Players' : totalError < 0 ? 'Bank' : '—'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+         </div>
+       )}
+     </div>
+   );
+ };
+
+ export default ResultsPage;
