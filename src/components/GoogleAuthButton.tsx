@@ -81,10 +81,7 @@ const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
 
         {showDropdown && (
           <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={onToggleDropdown}
-            />
+            <div className="fixed inset-0 z-40" onClick={onToggleDropdown} />
             <div
               className="absolute right-0 mt-2 w-64 border-3 z-50"
               style={{

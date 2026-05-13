@@ -162,7 +162,13 @@
   .table-nb {
     @apply w-full border-collapse border-3;
     border-color: var(--color-border);
-    min-width: 600px;
+    min-width: 420px;
+  }
+
+  @media (min-width: 768px) {
+    .table-nb {
+      min-width: 600px;
+    }
   }
 
   .table-nb th {

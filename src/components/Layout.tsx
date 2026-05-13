@@ -205,7 +205,9 @@ const Layout: React.FC = () => {
                 needsReauth={auth.needsReauth}
                 isAutoReconnecting={auth.isAutoReconnecting}
                 showDropdown={auth.showDropdown}
-                onToggleDropdown={() => auth.setShowDropdown(!auth.showDropdown)}
+                onToggleDropdown={() =>
+                  auth.setShowDropdown(!auth.showDropdown)
+                }
                 onLogin={auth.login}
                 onLoginWithHint={auth.loginWithHint}
                 onLogout={auth.handleLogout}
@@ -299,7 +301,9 @@ const Layout: React.FC = () => {
                 needsReauth={auth.needsReauth}
                 isAutoReconnecting={auth.isAutoReconnecting}
                 showDropdown={auth.showDropdown}
-                onToggleDropdown={() => auth.setShowDropdown(!auth.showDropdown)}
+                onToggleDropdown={() =>
+                  auth.setShowDropdown(!auth.showDropdown)
+                }
                 onLogin={auth.login}
                 onLoginWithHint={auth.loginWithHint}
                 onLogout={auth.handleLogout}

@@ -69,6 +69,9 @@ const PlayPage: React.FC = () => {
     buyInId: string;
   } | null>(null);
   const [showCashOutModal, setShowCashOutModal] = useState<string | null>(null);
+  const [showRemovePlayerModal, setShowRemovePlayerModal] = useState<
+    string | null
+  >(null);
   const [buyInAmount, setBuyInAmount] = useState('');
   const [cashOutAmount, setCashOutAmount] = useState('');
   const [editBuyInAmount, setEditBuyInAmount] = useState('');
@@ -1056,63 +1059,58 @@ const PlayPage: React.FC = () => {
     <div className="space-y-6">
       {/* Session Header */}
       <div className="card-nb md:p-6 p-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-lg sm:text-2xl break-words leading-tight">
-              {activeSession.name ||
-                parseLocalDate(activeSession.date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-            </h2>
-            {(activeSession.stakes || activeSession.location) && (
-              <p className="text-sm text-theme-secondary break-words">
-                {activeSession.stakes}
-                {activeSession.stakes && activeSession.location && ' @ '}
-                {!activeSession.stakes && activeSession.location && '@ '}
-                {activeSession.location}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handleEndSession}
-            disabled={isSavingToSheet}
-            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
-          >
-            {isSavingToSheet ? 'Saving...' : 'End Session'}
-          </button>
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-2xl break-words leading-tight">
+            {activeSession.name ||
+              parseLocalDate(activeSession.date).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+          </h2>
+          {(activeSession.stakes || activeSession.location) && (
+            <p className="text-sm text-theme-secondary break-words">
+              {activeSession.stakes}
+              {activeSession.stakes && activeSession.location && ' @ '}
+              {!activeSession.stakes && activeSession.location && '@ '}
+              {activeSession.location}
+            </p>
+          )}
         </div>
       </div>
 
       {/* Table Total */}
       <div className="card-nb bg-nb-yellow text-nb-black p-3 md:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
-          <div className="sm:flex-1">
-            <div className="text-xs sm:text-sm font-semibold text-nb-black">
-              Total on Table
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+          <div className="flex items-center justify-between gap-4 md:justify-normal md:flex-1">
+            <div>
+              <div className="text-xs md:text-sm font-semibold text-nb-black">
+                Total on Table
+              </div>
+              <div className="text-xl md:text-2xl font-bold text-nb-black">
+                {formatMoney(tableTotal)}
+              </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-nb-black">
-              {formatMoney(tableTotal)}
-            </div>
-          </div>
-          {cashOutTotal > 0 && (
-            <>
-              <div className="text-center sm:text-left">
-                <div className="text-xs sm:text-sm font-semibold text-nb-black">
+            {cashOutTotal > 0 && (
+              <div className="text-right">
+                <div className="text-xs md:text-sm font-semibold text-nb-black">
                   Cashed Out
                 </div>
-                <div className="text-xl sm:text-2xl font-bold text-nb-black">
+                <div className="text-xl md:text-2xl font-bold text-nb-black">
                   {formatMoney(cashOutTotal)}
                 </div>
               </div>
-              <div className="text-center sm:text-right">
-                <div className="text-xs sm:text-sm font-semibold text-nb-black">
+            )}
+          </div>
+          {cashOutTotal > 0 && (
+            <div className="flex items-center justify-between gap-4 md:justify-normal">
+              <div>
+                <div className="text-xs md:text-sm font-semibold text-nb-black">
                   Difference
                 </div>
                 <div
-                  className={`text-xl sm:text-2xl font-bold ${
+                  className={`text-xl md:text-2xl font-bold ${
                     cashOutTotal - tableTotal === 0
                       ? 'text-nb-green'
                       : 'text-nb-red'
@@ -1121,7 +1119,23 @@ const PlayPage: React.FC = () => {
                   {formatMoneyWithSign(cashOutTotal - tableTotal)}
                 </div>
               </div>
-            </>
+              {cashOutTotal !== tableTotal && (
+                <div className="text-right">
+                  <div className="text-xs md:text-sm font-semibold text-nb-black">
+                    In Favor Of
+                  </div>
+                  <div
+                    className={`text-sm md:text-base font-bold ${
+                      cashOutTotal - tableTotal > 0
+                        ? 'text-nb-green'
+                        : 'text-nb-red'
+                    }`}
+                  >
+                    {cashOutTotal - tableTotal > 0 ? 'Players' : 'Bank'}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           <button
             onClick={() => {
@@ -1138,7 +1152,9 @@ const PlayPage: React.FC = () => {
 
       {/* Players List */}
       <div className="card-nb md:p-6 p-3 overflow-x-auto">
-        <h3 className="mb-3 md:mb-4 text-base md:text-xl">Players</h3>
+        <h3 className="mb-3 md:mb-4 text-base md:text-xl">
+          Players ({activePlayerSessions.length})
+        </h3>
         {activePlayerSessions.length === 0 ? (
           <p className="text-theme-secondary text-center py-8 text-sm">
             No players yet. Add a player to get started.
@@ -1147,21 +1163,13 @@ const PlayPage: React.FC = () => {
           <table className="table-nb text-sm">
             <thead>
               <tr>
-                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">
-                  Player
-                </th>
-                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">
-                  Buy-ins
-                </th>
-                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">Player</th>
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">Buy-ins</th>
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">
                   Cash-out
                 </th>
-                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">
-                  P/L
-                </th>
-                <th className="px-2 py-2 md:px-4 md:py-3 text-xs md:text-sm">
-                  Actions
-                </th>
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">P/L</th>
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1175,15 +1183,15 @@ const PlayPage: React.FC = () => {
 
                 return (
                   <tr key={ps.id}>
-                    <td className="px-2 py-2 md:px-4 md:py-3 font-semibold whitespace-nowrap">
+                    <td className="px-1 py-1.5 md:px-4 md:py-3 font-semibold whitespace-nowrap text-xs md:text-sm">
                       {getPlayerName(ps.playerId)}
                     </td>
-                    <td className="px-2 py-2 md:px-4 md:py-3">
-                      <div className="flex flex-wrap gap-1 items-center">
+                    <td className="px-1 py-1.5 md:px-4 md:py-3">
+                      <div className="flex flex-wrap gap-0.5 md:gap-1 items-center">
                         {ps.buyIns.map((buyIn) => (
                           <span
                             key={buyIn.id}
-                            className="badge-nb bg-nb-blue text-nb-white text-xs px-2 py-0.5 cursor-pointer hover:bg-nb-yellow transition-colors"
+                            className="badge-nb bg-nb-blue text-nb-white px-1 py-0 text-xs md:px-2 md:py-0.5 cursor-pointer hover:bg-nb-yellow transition-colors"
                             onClick={() => {
                               setEditBuyInAmount(buyIn.amount.toString());
                               setShowEditBuyInModal({
@@ -1210,18 +1218,18 @@ const PlayPage: React.FC = () => {
                           +
                         </button>
                       </div>
-                      <div className="text-xs text-theme-secondary mt-1">
+                      <div className="text-xs text-theme-secondary mt-0.5 md:mt-1">
                         Total: {formatMoney(totalBuyIns)}
                       </div>
                     </td>
-                    <td className="px-2 py-2 md:px-4 md:py-3 whitespace-nowrap">
+                    <td className="px-1 py-1.5 md:px-4 md:py-3 whitespace-nowrap">
                       {ps.cashOut !== undefined ? (
                         <button
                           onClick={() => {
                             setCashOutAmount(ps.cashOut!.toString());
                             setShowCashOutModal(ps.id);
                           }}
-                          className="font-semibold hover:text-nb-blue hover:underline cursor-pointer text-sm"
+                          className="font-semibold hover:text-nb-blue hover:underline cursor-pointer text-xs md:text-sm"
                           title="Click to edit"
                         >
                           {formatMoney(ps.cashOut)}
@@ -1229,16 +1237,16 @@ const PlayPage: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => setShowCashOutModal(ps.id)}
-                          className="btn-nb text-xs py-1 px-2"
+                          className="btn-nb text-xs py-0.5 px-1 md:py-1 md:px-2"
                         >
                           Cash Out
                         </button>
                       )}
                     </td>
-                    <td className="px-2 py-2 md:px-4 md:py-3 whitespace-nowrap">
+                    <td className="px-1 py-1.5 md:px-4 md:py-3 whitespace-nowrap">
                       {netResult !== null ? (
                         <span
-                          className={`font-bold text-sm ${
+                          className={`font-bold text-xs md:text-sm ${
                             netResult >= 0
                               ? 'status-positive'
                               : 'status-negative'
@@ -1247,19 +1255,16 @@ const PlayPage: React.FC = () => {
                           {formatMoneyWithSign(netResult)}
                         </span>
                       ) : (
-                        <span className="text-theme-secondary text-sm">-</span>
+                        <span className="text-theme-secondary text-xs md:text-sm">
+                          -
+                        </span>
                       )}
                     </td>
-                    <td className="px-2 py-2 md:px-4 md:py-3">
+                    <td className="px-1 py-1.5 md:px-4 md:py-3">
                       {ps.cashOut === undefined && (
                         <button
-                          onClick={() => {
-                            dispatch(removePlayerFromSession(ps.id));
-                            dispatch(markUnsyncedChanges());
-                            suspendPolling();
-                            debouncedSync();
-                          }}
-                          className="text-nb-red hover:underline text-xs md:text-sm"
+                          onClick={() => setShowRemovePlayerModal(ps.id)}
+                          className="text-nb-red hover:underline text-xs"
                         >
                           Remove
                         </button>
@@ -1271,6 +1276,18 @@ const PlayPage: React.FC = () => {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="card-nb md:p-6 p-3">
+        <div className="flex justify-end">
+          <button
+            onClick={handleEndSession}
+            disabled={isSavingToSheet}
+            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
+          >
+            {isSavingToSheet ? 'Saving...' : 'End Session'}
+          </button>
+        </div>
       </div>
 
       {/* Add Player Modal */}
@@ -1598,6 +1615,56 @@ const PlayPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Remove Player Confirmation Modal */}
+      {showRemovePlayerModal &&
+        (() => {
+          const playerSession = activePlayerSessions.find(
+            (ps) => ps.id === showRemovePlayerModal,
+          );
+          const playerName = playerSession
+            ? getPlayerName(playerSession.playerId || '')
+            : '';
+
+          const handleRemove = () => {
+            dispatch(removePlayerFromSession(showRemovePlayerModal!));
+            dispatch(markUnsyncedChanges());
+            suspendPolling();
+            debouncedSync();
+            setShowRemovePlayerModal(null);
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+              <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+                <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">
+                  Remove Player
+                </h3>
+                <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
+                  Are you sure you want to remove{' '}
+                  <span className="font-semibold text-theme-text">
+                    {playerName}
+                  </span>{' '}
+                  from the session? Their buy-ins and cash-out will be lost.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleRemove}
+                    className="btn-nb-danger text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    onClick={() => setShowRemovePlayerModal(null)}
+                    className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Sync indicator */}
       {isSyncingInProgress && (

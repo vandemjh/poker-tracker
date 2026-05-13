@@ -40,7 +40,10 @@ export function calculatePlayerStatistics(
       ) {
         return false;
       }
-      if (dateFilter.endDate && sessionDate > parseLocalDate(dateFilter.endDate)) {
+      if (
+        dateFilter.endDate &&
+        sessionDate > parseLocalDate(dateFilter.endDate)
+      ) {
         return false;
       }
       return true;
@@ -211,7 +214,10 @@ export function findErrorSessions(
       ) {
         return false;
       }
-      if (dateFilter.endDate && sessionDate > parseLocalDate(dateFilter.endDate)) {
+      if (
+        dateFilter.endDate &&
+        sessionDate > parseLocalDate(dateFilter.endDate)
+      ) {
         return false;
       }
       return true;

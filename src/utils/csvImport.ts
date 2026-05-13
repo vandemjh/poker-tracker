@@ -251,11 +251,14 @@ export function parseCSV(csvContent: string): ParsedCSVData {
   sessions.forEach((session) => {
     const total = sessionTotals.get(session.id) || 0;
     if (Math.abs(total) > 0.01) {
-      const formattedDate = parseLocalDate(session.date).toLocaleDateString('en-US', {
-        month: 'numeric',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      const formattedDate = parseLocalDate(session.date).toLocaleDateString(
+        'en-US',
+        {
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+        },
+      );
       warnings.push({
         sessionDate: formattedDate,
         message: `Session does not sum to zero. Difference: ${total.toFixed(2)}`,
@@ -435,11 +438,14 @@ export function parseSpreadsheetData(
   sessions.forEach((session) => {
     const total = sessionTotals.get(session.id) || 0;
     if (Math.abs(total) > 0.01) {
-      const formattedDate = parseLocalDate(session.date).toLocaleDateString('en-US', {
-        month: 'numeric',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      const formattedDate = parseLocalDate(session.date).toLocaleDateString(
+        'en-US',
+        {
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+        },
+      );
       warnings.push({
         sessionDate: formattedDate,
         message: `Session does not sum to zero. Difference: ${total.toFixed(2)}`,
