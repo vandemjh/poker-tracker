@@ -1232,7 +1232,8 @@ const PlayPage: React.FC = () => {
                           className="font-semibold hover:text-nb-blue hover:underline cursor-pointer text-xs md:text-sm"
                           title="Click to edit"
                         >
-                          {formatMoney(ps.cashOut)}
+                          {formatMoney(ps.cashOut)}{' '}
+                          <span className="ml-0.5 opacity-60">✏️</span>
                         </button>
                       ) : (
                         <button
@@ -1261,14 +1262,12 @@ const PlayPage: React.FC = () => {
                       )}
                     </td>
                     <td className="px-1 py-1.5 md:px-4 md:py-3">
-                      {ps.cashOut === undefined && (
-                        <button
-                          onClick={() => setShowRemovePlayerModal(ps.id)}
-                          className="text-nb-red hover:underline text-xs"
-                        >
-                          Remove
-                        </button>
-                      )}
+                      <button
+                        onClick={() => setShowRemovePlayerModal(ps.id)}
+                        className="text-nb-red hover:underline text-xs"
+                      >
+                        Remove
+                      </button>
                     </td>
                   </tr>
                 );

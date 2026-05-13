@@ -28,6 +28,7 @@ export function useGoogleAuth() {
   const autoReconnectAttempted = useRef(false);
   const hasInitialized = useRef(false);
   const reauthResolverRef = useRef<((success: boolean) => void) | null>(null);
+  const pendingSyncAfterReauth = useRef(false);
 
   const syncFromSpreadsheet = useCallback(
     async (spreadsheetId: string, existingPlayers: typeof players = []) => {
@@ -75,7 +76,9 @@ export function useGoogleAuth() {
         const spreadsheetId = googleDriveService.getStoredSpreadsheetId();
         if (spreadsheetId) {
           dispatch(setImportedSpreadsheetId(spreadsheetId));
-          if (!isReauth) {
+          const shouldSync = !isReauth || pendingSyncAfterReauth.current;
+          pendingSyncAfterReauth.current = false;
+          if (shouldSync) {
             await syncFromSpreadsheet(spreadsheetId, players);
           }
         }
@@ -157,6 +160,9 @@ export function useGoogleAuth() {
             await syncFromSpreadsheet(storedSpreadsheetId);
           }
         } else {
+          if (storedSpreadsheetId) {
+            pendingSyncAfterReauth.current = true;
+          }
           dispatch(setGoogleUser(storedUser));
           setNeedsReauth(true);
         }
