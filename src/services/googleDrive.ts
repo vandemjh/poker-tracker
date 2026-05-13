@@ -325,6 +325,15 @@ class GoogleDriveService {
     }
   }
 
+  // Fetch spreadsheet metadata (name)
+  async getSpreadsheetName(spreadsheetId: string): Promise<string> {
+    const response = await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title`,
+    );
+    const data = await response.json();
+    return data.properties.title;
+  }
+
   // Fetch spreadsheet data from Google Sheets (from Totals sheet)
   async getSpreadsheetData(spreadsheetId: string): Promise<string[][]> {
     try {

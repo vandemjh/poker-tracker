@@ -12,11 +12,9 @@ import {
   generateImportReport,
   generateErrorLog,
 } from '../utils/csvImport';
+import { extractSpreadsheetIdFromUrl } from '../utils/googleSheets';
 import { googleDriveService } from '../services/googleDrive';
-import { openGooglePicker } from '../services/googlePicker';
 import type { CSVImportResult } from '../types';
-
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 
 const CSVImportModal: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -33,6 +31,7 @@ const CSVImportModal: React.FC = () => {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [sheetUrl, setSheetUrl] = useState('');
 
   const resetState = () => {
     setIsProcessing(false);
@@ -40,6 +39,7 @@ const CSVImportModal: React.FC = () => {
     setSelectedSpreadsheetId(null);
     setImportResult(null);
     setError(null);
+    setSheetUrl('');
   };
 
   const handleClose = () => {
@@ -47,7 +47,7 @@ const CSVImportModal: React.FC = () => {
     dispatch(setShowImportModal(false));
   };
 
-  const handleSelectFromDrive = async () => {
+  const handleLinkSubmit = async () => {
     if (!isGoogleConnected) {
       setError('Please connect to Google Drive first');
       return;
@@ -59,9 +59,10 @@ const CSVImportModal: React.FC = () => {
       return;
     }
 
-    if (!GOOGLE_API_KEY) {
+    const spreadsheetId = extractSpreadsheetIdFromUrl(sheetUrl);
+    if (!spreadsheetId) {
       setError(
-        'Google API key not configured. Please add VITE_GOOGLE_API_KEY to your environment.',
+        'Invalid Google Sheets URL. Please paste a valid link to a Google Sheet.',
       );
       return;
     }
@@ -71,32 +72,21 @@ const CSVImportModal: React.FC = () => {
       setError(null);
       setImportResult(null);
 
-      const selectedFile = await openGooglePicker(accessToken, GOOGLE_API_KEY);
+      const name = await googleDriveService.getSpreadsheetName(spreadsheetId);
+      setSelectedFileName(name);
+      setSelectedSpreadsheetId(spreadsheetId);
 
-      if (!selectedFile) {
-        // User cancelled
-        setIsProcessing(false);
-        return;
-      }
+      const spreadsheetData =
+        await googleDriveService.getSpreadsheetData(spreadsheetId);
 
-      setSelectedFileName(selectedFile.name);
-      setSelectedSpreadsheetId(selectedFile.id);
-
-      // Fetch the spreadsheet data
-      const spreadsheetData = await googleDriveService.getSpreadsheetData(
-        selectedFile.id,
-      );
-
-      // Parse the data
       const result = parseSpreadsheetData(spreadsheetData);
       const report = generateImportReport(result);
 
       setImportResult(report);
 
-      // Store the full data for import
       (window as any).__csvImportData = result;
     } catch (err) {
-      console.error('Error selecting file from Drive:', err);
+      console.error('Error loading spreadsheet:', err);
       setError(String(err));
     } finally {
       setIsProcessing(false);
@@ -181,17 +171,36 @@ const CSVImportModal: React.FC = () => {
 
         {!importResult && !isProcessing && (
           <>
-            <div className="text-center py-8">
-              <div className="text-6xl mb-4">📊</div>
-              <button
-                onClick={handleSelectFromDrive}
-                disabled={!isGoogleConnected || isProcessing}
-                className={`btn-nb-primary ${!isGoogleConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+            <div className="py-6">
+              <label
+                htmlFor="sheet-url"
+                className="block text-sm font-semibold mb-2"
               >
-                Select Google Sheet
+                Paste Google Sheets URL
+              </label>
+              <input
+                id="sheet-url"
+                type="text"
+                value={sheetUrl}
+                onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                className="w-full px-4 py-3 border-3 text-sm font-mono"
+                style={{
+                  backgroundColor: 'var(--color-bg-card)',
+                  borderColor: 'var(--color-border)',
+                }}
+                disabled={!isGoogleConnected}
+              />
+              <button
+                onClick={handleLinkSubmit}
+                disabled={!isGoogleConnected || !sheetUrl.trim() || isProcessing}
+                className={`btn-nb-primary mt-4 w-full ${!isGoogleConnected || !sheetUrl.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                Load Sheet
               </button>
-              <p className="text-sm text-theme-secondary mt-4">
-                Choose a Google Sheet to link for tracking your poker sessions
+              <p className="text-sm text-theme-secondary mt-4 text-center">
+                Paste the URL of a Google Sheet to link for tracking your poker
+                sessions
               </p>
             </div>
 
@@ -266,7 +275,7 @@ const CSVImportModal: React.FC = () => {
             <p className="font-semibold">
               {selectedFileName
                 ? `Processing "${selectedFileName}"...`
-                : 'Selecting file...'}
+                : 'Loading sheet...'}
             </p>
           </div>
         )}
@@ -349,7 +358,7 @@ const CSVImportModal: React.FC = () => {
               )}
 
               <button onClick={resetState} className="btn-nb">
-                Select Different File
+                Enter Different URL
               </button>
 
               <button
