@@ -570,10 +570,11 @@ class GoogleDriveService {
       return null;
     }
     const millisecondsPerDay = 24 * 60 * 60 * 1000;
-    const date = new Date((serial - 25569) * millisecondsPerDay);
-    const year = date.getFullYear();
+    const utcDate = new Date((serial - 25569) * millisecondsPerDay);
+    const year = utcDate.getUTCFullYear();
     if (year >= 1990 && year <= 2100) {
-      return date;
+      // Convert from UTC midnight to local midnight to avoid timezone shifts
+      return new Date(year, utcDate.getUTCMonth(), utcDate.getUTCDate());
     }
     return null;
   }

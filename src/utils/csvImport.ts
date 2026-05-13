@@ -59,12 +59,13 @@ function serialDateToDate(serial: number): Date | null {
   // Excel/Sheets serial date epoch is December 30, 1899
   // 25569 is the number of days between Dec 30, 1899 and Jan 1, 1970 (Unix epoch)
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  const date = new Date((serial - 25569) * millisecondsPerDay);
+  const utcDate = new Date((serial - 25569) * millisecondsPerDay);
 
   // Validate it's a reasonable date (between 1990 and 2100)
-  const year = date.getFullYear();
+  const year = utcDate.getUTCFullYear();
   if (year >= 1990 && year <= 2100) {
-    return date;
+    // Convert from UTC midnight to local midnight to avoid timezone shifts
+    return new Date(year, utcDate.getUTCMonth(), utcDate.getUTCDate());
   }
 
   return null;

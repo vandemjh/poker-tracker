@@ -146,13 +146,15 @@ const Layout: React.FC = () => {
               >
                 Results
               </NavLink>
-              <NavLink
-                to="/play"
-                className={({ isActive }) => navButtonClass(isActive)}
-                style={({ isActive }) => navButtonStyle(isActive)}
-              >
-                Play
-              </NavLink>
+              {isGoogleConnected && (
+                <NavLink
+                  to="/play"
+                  className={({ isActive }) => navButtonClass(isActive)}
+                  style={({ isActive }) => navButtonStyle(isActive)}
+                >
+                  Play
+                </NavLink>
+              )}
               {importedSpreadsheetId ? (
                 <button
                   onClick={handleManualSync}
@@ -235,14 +237,16 @@ const Layout: React.FC = () => {
             >
               Results
             </NavLink>
-            <NavLink
-              to="/play"
-              className={({ isActive }) => navButtonClass(isActive)}
-              style={({ isActive }) => navButtonStyle(isActive)}
-              onClick={closeMobileMenu}
-            >
-              Play
-            </NavLink>
+            {isGoogleConnected && (
+              <NavLink
+                to="/play"
+                className={({ isActive }) => navButtonClass(isActive)}
+                style={({ isActive }) => navButtonStyle(isActive)}
+                onClick={closeMobileMenu}
+              >
+                Play
+              </NavLink>
+            )}
             {importedSpreadsheetId ? (
               <button
                 onClick={() => {

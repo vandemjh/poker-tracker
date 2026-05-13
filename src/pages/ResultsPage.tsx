@@ -166,7 +166,7 @@ const ResultsPage: React.FC = () => {
     // Get all completed sessions sorted by date (most recent first)
     const allCompletedSessions = [...sessions]
       .filter((s) => s.isComplete)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
 
     const recentSessions = allCompletedSessions.slice(0, recentGamesCount);
 
@@ -435,7 +435,7 @@ const ResultsPage: React.FC = () => {
                     {parseLocalDate(session.date).toLocaleDateString(
                       undefined,
                       {
-                        weekday: 'short',
+                        weekday: 'long',
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',

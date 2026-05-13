@@ -832,6 +832,29 @@ const PlayPage: React.FC = () => {
     return new Set(activePlayerSessions.map((ps) => ps.playerId));
   }, [activePlayerSessions]);
 
+  // Block access in local mode - ended games won't sync to a linked sheet.
+  // Allow users with an existing active session through (e.g., if they disconnected mid-game).
+  if (!isGoogleConnected && !activeSessionId) {
+    return (
+      <div className="max-w-lg mx-auto space-y-6 mt-8 md:mt-16">
+        <div className="card-nb p-6 md:p-8 text-center">
+          <div className="text-5xl md:text-6xl mb-4">🔒</div>
+          <h2 className="text-xl md:text-2xl font-bold mb-3">
+            Play Mode Requires Google Connection
+          </h2>
+          <p className="text-sm md:text-base text-theme-secondary mb-6">
+            To ensure your sessions are saved to your linked spreadsheet, you
+            need to connect to Google before using Play mode.
+          </p>
+          <p className="text-xs md:text-sm text-theme-secondary">
+            Connect your Google account using the button in the header to unlock
+            Play mode.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // If no active session, show session creation or list of incomplete sessions
   if (!activeSession) {
     const incompleteSessions = sessions.filter(
@@ -989,7 +1012,7 @@ const PlayPage: React.FC = () => {
                 <p className="text-xs md:text-sm text-theme-secondary break-words">
                   Resume "
                   {lastCompletedSession.name ||
-                    new Date(lastCompletedSession.date).toLocaleDateString()}
+                    parseLocalDate(lastCompletedSession.date).toLocaleDateString()}
                   " (ended{' '}
                   {new Date(lastCompletedSession.updatedAt).toLocaleString()})
                 </p>
