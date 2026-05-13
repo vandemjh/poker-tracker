@@ -847,32 +847,26 @@ const PlayPage: React.FC = () => {
       );
     const lastCompletedSession = recentlyCompletedSessions[0];
 
-    // Check if user can start a session (must have Google connected and sheet linked)
-    const canStartSession = isGoogleConnected && importedSpreadsheetId;
-
     return (
       <div className="space-y-4 md:space-y-6">
-        {!canStartSession && (
+        {!isGoogleConnected && (
           <div className="card-nb bg-nb-orange p-3 md:p-6">
             <div className="flex items-center gap-3 md:gap-4">
               <div className="text-3xl md:text-4xl">📊</div>
               <div>
                 <h3 className="text-base md:text-lg text-nb-black">
-                  Link a Google Sheet to get started
+                  Local Mode — No Google Sync
                 </h3>
                 <p className="text-xs md:text-sm text-nb-black opacity-80">
-                  {!isGoogleConnected
-                    ? 'Connect to Google Drive and link a spreadsheet to track your games.'
-                    : 'Click the "Link" button in the header to connect a Google Sheet.'}
+                  Sessions are saved in this browser only. Connect to Google
+                  Drive to sync across devices and link a spreadsheet.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        <div
-          className={`card-nb md:p-6 p-3 ${!canStartSession ? 'opacity-50 pointer-events-none' : ''}`}
-        >
+        <div className="card-nb md:p-6 p-3">
           <h2 className="mb-4 md:mb-6 text-lg md:text-2xl">
             Start New Session
           </h2>
@@ -945,14 +939,13 @@ const PlayPage: React.FC = () => {
             <button
               type="submit"
               className="btn-nb-primary text-sm py-2 px-4 md:text-base md:py-3 md:px-6"
-              disabled={!canStartSession}
             >
               Start Session
             </button>
           </form>
         </div>
 
-        {incompleteSessions.length > 0 && canStartSession && (
+        {incompleteSessions.length > 0 && (
           <div className="card-nb md:p-6 p-3">
             <h2 className="mb-3 md:mb-4 text-base md:text-2xl">
               Resume Session
@@ -986,7 +979,7 @@ const PlayPage: React.FC = () => {
         )}
 
         {/* Resume accidentally ended game */}
-        {lastCompletedSession && canStartSession && (
+        {lastCompletedSession && (
           <div className="card-nb md:p-6 p-3 bg-nb-orange bg-opacity-20">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
               <div>

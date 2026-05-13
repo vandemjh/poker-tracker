@@ -116,7 +116,7 @@ const SyncStatusIndicator: React.FC = () => {
   if (!isGoogleConnected) {
     return (
       <span className="badge-nb bg-theme-card text-theme-secondary text-xs">
-        Offline
+        Local
       </span>
     );
   }

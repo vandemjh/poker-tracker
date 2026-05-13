@@ -48,17 +48,6 @@ const CSVImportModal: React.FC = () => {
   };
 
   const handleLinkSubmit = async () => {
-    if (!isGoogleConnected) {
-      setError('Please connect to Google Drive first');
-      return;
-    }
-
-    const accessToken = googleDriveService.getAccessToken();
-    if (!accessToken) {
-      setError('Not authenticated. Please reconnect to Google Drive.');
-      return;
-    }
-
     const spreadsheetId = extractSpreadsheetIdFromUrl(sheetUrl);
     if (!spreadsheetId) {
       setError(
@@ -67,11 +56,72 @@ const CSVImportModal: React.FC = () => {
       return;
     }
 
-    try {
-      setIsProcessing(true);
-      setError(null);
-      setImportResult(null);
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
 
+    setIsProcessing(true);
+    setError(null);
+    setImportResult(null);
+
+    try {
+      let name: string;
+      let spreadsheetData: string[][];
+
+      // Try public access first (works for "Anyone with the link" sheets)
+      if (apiKey) {
+        try {
+          name = await googleDriveService.getSpreadsheetNamePublic(
+            spreadsheetId,
+            apiKey,
+          );
+          spreadsheetData =
+            await googleDriveService.getSpreadsheetDataPublic(
+              spreadsheetId,
+              apiKey,
+            );
+        } catch (publicErr) {
+          // Public access failed — fall through to OAuth fallback below
+          console.log(
+            'Public access failed, trying authenticated:',
+            publicErr,
+          );
+          // Re-throw to reach the OAuth fallback or error path in the outer catch
+          throw publicErr;
+        }
+      } else {
+        throw new Error('No API key configured');
+      }
+
+      setSelectedFileName(name);
+      setSelectedSpreadsheetId(spreadsheetId);
+
+      const result = parseSpreadsheetData(spreadsheetData);
+      const report = generateImportReport(result);
+
+      setImportResult(report);
+      (window as any).__csvImportData = result;
+      setIsProcessing(false);
+      return;
+    } catch {
+      // public access failed
+    }
+
+    // Fall back to authenticated access
+    if (!isGoogleConnected) {
+      setError(
+        'This sheet is not publicly accessible. Connect to Google Drive to access private sheets, or make the sheet public.',
+      );
+      setIsProcessing(false);
+      return;
+    }
+
+    const accessToken = googleDriveService.getAccessToken();
+    if (!accessToken) {
+      setError('Not authenticated. Please reconnect to Google Drive.');
+      setIsProcessing(false);
+      return;
+    }
+
+    try {
       const name = await googleDriveService.getSpreadsheetName(spreadsheetId);
       setSelectedFileName(name);
       setSelectedSpreadsheetId(spreadsheetId);
@@ -83,7 +133,6 @@ const CSVImportModal: React.FC = () => {
       const report = generateImportReport(result);
 
       setImportResult(report);
-
       (window as any).__csvImportData = result;
     } catch (err) {
       console.error('Error loading spreadsheet:', err);
@@ -189,12 +238,11 @@ const CSVImportModal: React.FC = () => {
                   backgroundColor: 'var(--color-bg-card)',
                   borderColor: 'var(--color-border)',
                 }}
-                disabled={!isGoogleConnected}
               />
               <button
                 onClick={handleLinkSubmit}
-                disabled={!isGoogleConnected || !sheetUrl.trim() || isProcessing}
-                className={`btn-nb-primary mt-4 w-full ${!isGoogleConnected || !sheetUrl.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={!sheetUrl.trim() || isProcessing}
+                className={`btn-nb-primary mt-4 w-full ${!sheetUrl.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Load Sheet
               </button>

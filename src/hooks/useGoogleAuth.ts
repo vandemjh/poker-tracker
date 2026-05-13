@@ -11,9 +11,13 @@ import {
   replaceImportedSessions,
   setImportedSpreadsheetId,
   setInitializing,
+  setPlayers,
+  setSessions,
+  setPlayerSessions,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
 import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import { loadLocalData } from '../services/localDataService';
 
 export function useGoogleAuth() {
   const dispatch = useAppDispatch();
@@ -165,6 +169,16 @@ export function useGoogleAuth() {
           }
           dispatch(setGoogleUser(storedUser));
           setNeedsReauth(true);
+        }
+      }
+
+      // If no Google session, try loading locally persisted data
+      if (!storedToken) {
+        const localData = loadLocalData();
+        if (localData && localData.players.length > 0) {
+          dispatch(setPlayers(localData.players));
+          dispatch(setSessions(localData.sessions));
+          dispatch(setPlayerSessions(localData.playerSessions));
         }
       }
 

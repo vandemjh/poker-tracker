@@ -353,6 +353,60 @@ class GoogleDriveService {
     }
   }
 
+  // Fetch spreadsheet name using API key (for publicly shared sheets)
+  async getSpreadsheetNamePublic(
+    spreadsheetId: string,
+    apiKey: string,
+  ): Promise<string> {
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title&key=${apiKey}`,
+    );
+    if (!response.ok)
+      throw new Error(`Google Sheets API error: ${response.status}`);
+    const data = await response.json();
+    return data.properties.title;
+  }
+
+  // Fetch spreadsheet data using API key (for publicly shared sheets)
+  async getSpreadsheetDataPublic(
+    spreadsheetId: string,
+    apiKey: string,
+  ): Promise<string[][]> {
+    const sheetName = await this.getTotalsSheetNamePublic(
+      spreadsheetId,
+      apiKey,
+    );
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE&key=${apiKey}`,
+    );
+    if (!response.ok)
+      throw new Error(`Google Sheets API error: ${response.status}`);
+    const data = await response.json();
+    return data.values || [];
+  }
+
+  private async getTotalsSheetNamePublic(
+    spreadsheetId: string,
+    apiKey: string,
+  ): Promise<string> {
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties&key=${apiKey}`,
+    );
+    if (!response.ok)
+      throw new Error(`Google Sheets API error: ${response.status}`);
+    const metadata = await response.json();
+
+    const totalsSheet = metadata.sheets?.find(
+      (s: any) => s.properties.title === this.TOTALS_SHEET_NAME,
+    );
+    if (totalsSheet) return this.TOTALS_SHEET_NAME;
+
+    const firstSheet = metadata.sheets?.find(
+      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME,
+    );
+    return firstSheet?.properties.title || metadata.sheets[0].properties.title;
+  }
+
   // Append or update a session column in the Totals sheet
   // If a column with the same date exists, it updates that column
   // Otherwise, it appends a new column to the right
