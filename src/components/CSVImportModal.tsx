@@ -73,17 +73,13 @@ const CSVImportModal: React.FC = () => {
             spreadsheetId,
             apiKey,
           );
-          spreadsheetData =
-            await googleDriveService.getSpreadsheetDataPublic(
-              spreadsheetId,
-              apiKey,
-            );
+          spreadsheetData = await googleDriveService.getSpreadsheetDataPublic(
+            spreadsheetId,
+            apiKey,
+          );
         } catch (publicErr) {
           // Public access failed — fall through to OAuth fallback below
-          console.log(
-            'Public access failed, trying authenticated:',
-            publicErr,
-          );
+          console.log('Public access failed, trying authenticated:', publicErr);
           // Re-throw to reach the OAuth fallback or error path in the outer catch
           throw publicErr;
         }
@@ -205,8 +201,8 @@ const CSVImportModal: React.FC = () => {
           <div className="p-4 bg-nb-orange bg-opacity-20 border-3 border-nb-orange mb-4">
             <p className="font-semibold">Google Drive Not Connected</p>
             <p className="text-sm mt-1">
-              Please connect to Google Drive using the button in the navigation
-              bar before linking a sheet.
+              Without linking Google Drive you will not be able to start new
+              games.
             </p>
           </div>
         )}

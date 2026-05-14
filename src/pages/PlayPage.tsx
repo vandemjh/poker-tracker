@@ -1012,7 +1012,9 @@ const PlayPage: React.FC = () => {
                 <p className="text-xs md:text-sm text-theme-secondary break-words">
                   Resume "
                   {lastCompletedSession.name ||
-                    parseLocalDate(lastCompletedSession.date).toLocaleDateString()}
+                    parseLocalDate(
+                      lastCompletedSession.date,
+                    ).toLocaleDateString()}
                   " (ended{' '}
                   {new Date(lastCompletedSession.updatedAt).toLocaleString()})
                 </p>

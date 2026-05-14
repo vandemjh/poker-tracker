@@ -166,7 +166,10 @@ const ResultsPage: React.FC = () => {
     // Get all completed sessions sorted by date (most recent first)
     const allCompletedSessions = [...sessions]
       .filter((s) => s.isComplete)
-      .sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
+      .sort(
+        (a, b) =>
+          parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime(),
+      );
 
     const recentSessions = allCompletedSessions.slice(0, recentGamesCount);
 

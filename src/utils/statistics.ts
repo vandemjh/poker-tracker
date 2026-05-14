@@ -125,7 +125,8 @@ export function calculatePlayerStatistics(
     const sessionB = sessionMap.get(b.sessionId);
     if (!sessionA || !sessionB) return 0;
     return (
-      parseLocalDate(sessionA.date).getTime() - parseLocalDate(sessionB.date).getTime()
+      parseLocalDate(sessionA.date).getTime() -
+      parseLocalDate(sessionB.date).getTime()
     );
   });
 
@@ -235,7 +236,8 @@ export function findErrorSessions(
 
   return errors.sort(
     (a, b) =>
-      parseLocalDate(b.session.date).getTime() - parseLocalDate(a.session.date).getTime(),
+      parseLocalDate(b.session.date).getTime() -
+      parseLocalDate(a.session.date).getTime(),
   );
 }
 
