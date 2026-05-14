@@ -42,9 +42,13 @@ const CHART_COLORS = [
 
 interface BalanceChartProps {
   data: PlayerStatistics[];
+  showPoints?: boolean;
 }
 
-const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
+const BalanceChart: React.FC<BalanceChartProps> = ({
+  data,
+  showPoints = true,
+}) => {
   const { isDark } = useTheme();
 
   // Theme-aware colors
@@ -53,7 +57,10 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
   const tooltipBg = isDark ? '#1e293b' : '#000000';
   const tooltipBorder = isDark ? '#475569' : '#000000';
 
-  if (data.length === 0 || data.every((d) => d.balanceHistory.length === 0)) {
+  // Only include players with balance history in the visible range
+  const activeData = data.filter((d) => d.balanceHistory.length > 0);
+
+  if (activeData.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-theme-secondary">
         No balance history data available
@@ -61,9 +68,9 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
     );
   }
 
-  // Get all unique dates across all players and sort them
+  // Get all unique dates across all active players and sort them
   const allDates = new Set<string>();
-  data.forEach((player) => {
+  activeData.forEach((player) => {
     player.balanceHistory.forEach((entry) => {
       allDates.add(entry.date);
     });
@@ -76,7 +83,7 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
   const labels = sortedDates.map((date) => formatDateShort(date));
 
   // Create dataset for each player
-  const datasets = data.map((player, index) => {
+  const datasets = activeData.map((player, index) => {
     const color = CHART_COLORS[index % CHART_COLORS.length];
 
     // Create a map of date to balance for this player
@@ -124,8 +131,8 @@ const BalanceChart: React.FC<BalanceChartProps> = ({ data }) => {
       borderColor: color,
       backgroundColor: color,
       borderWidth: 3,
-      pointRadius: 4,
-      pointHoverRadius: 6,
+      pointRadius: showPoints ? 4 : 0,
+      pointHoverRadius: showPoints ? 6 : 0,
       tension: 0.1,
       spanGaps: true,
     };

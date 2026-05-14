@@ -37,6 +37,7 @@ const ResultsPage: React.FC = () => {
   const [playerSearch, setPlayerSearch] = useState('');
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [recentGamesCount, setRecentGamesCount] = useState(5);
+  const [expandedGames, setExpandedGames] = useState<Set<string>>(new Set());
 
   const statistics = useMemo(() => {
     return calculateAllPlayerStatistics(
@@ -193,7 +194,7 @@ const ResultsPage: React.FC = () => {
         .sort((a, b) => b.netResult - a.netResult);
       const losers = results
         .filter((r) => r.netResult < 0)
-        .sort((a, b) => b.netResult - a.netResult);
+        .sort((a, b) => a.netResult - b.netResult);
 
       return {
         session,
@@ -396,7 +397,7 @@ const ResultsPage: React.FC = () => {
         </div>
 
         <div className="h-80">
-          <BalanceChart data={limitedChartData} />
+          <BalanceChart data={limitedChartData} showPoints={!showAllGames} />
         </div>
 
         {/* Show more games option */}
@@ -454,7 +455,10 @@ const ResultsPage: React.FC = () => {
                   {winners.length > 0 && (
                     <div className="mb-2">
                       <span className="font-semibold">Winners:</span>
-                      {winners.slice(0, 3).map((w, i) => (
+                      {(expandedGames.has(session.id)
+                        ? winners
+                        : winners.slice(0, 3)
+                      ).map((w, i) => (
                         <span key={w.name + i} className="ml-2">
                           {i > 0 ? ' • ' : ''}
                           <span className="status-positive">{w.name}</span>
@@ -465,17 +469,31 @@ const ResultsPage: React.FC = () => {
                         </span>
                       ))}
                       {winners.length > 3 && (
-                        <span className="ml-2 text-theme-secondary">
-                          {' '}
-                          +{winners.length - 3} more
-                        </span>
+                        <button
+                          onClick={() =>
+                            setExpandedGames((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(session.id)) next.delete(session.id);
+                              else next.add(session.id);
+                              return next;
+                            })
+                          }
+                          className="ml-2 text-nb-blue hover:underline"
+                        >
+                          {expandedGames.has(session.id)
+                            ? 'show less'
+                            : `+${winners.length - 3} more`}
+                        </button>
                       )}
                     </div>
                   )}
                   {losers.length > 0 && (
                     <div>
                       <span className="font-semibold">Losers:</span>
-                      {losers.slice(0, 3).map((l, i) => (
+                      {(expandedGames.has(session.id)
+                        ? losers
+                        : losers.slice(0, 3)
+                      ).map((l, i) => (
                         <span key={l.name + i} className="ml-2">
                           {i > 0 ? ' • ' : ''}
                           <span className="status-negative">{l.name}</span>
@@ -486,10 +504,21 @@ const ResultsPage: React.FC = () => {
                         </span>
                       ))}
                       {losers.length > 3 && (
-                        <span className="ml-2 text-theme-secondary">
-                          {' '}
-                          +{losers.length - 3} more
-                        </span>
+                        <button
+                          onClick={() =>
+                            setExpandedGames((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(session.id)) next.delete(session.id);
+                              else next.add(session.id);
+                              return next;
+                            })
+                          }
+                          className="ml-2 text-nb-blue hover:underline"
+                        >
+                          {expandedGames.has(session.id)
+                            ? 'show less'
+                            : `+${losers.length - 3} more`}
+                        </button>
                       )}
                     </div>
                   )}
