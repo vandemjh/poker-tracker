@@ -122,6 +122,12 @@ const PlayPage: React.FC = () => {
     return activePlayerSessions.reduce((sum, ps) => sum + (ps.cashOut || 0), 0);
   }, [activePlayerSessions]);
 
+  const sessionBalances = useMemo(() => {
+    if (!activeSessionId) return true;
+    const { isValid } = validateZeroSum(activeSessionId, activePlayerSessions);
+    return isValid;
+  }, [activeSessionId, activePlayerSessions]);
+
   // Helper to create a normalized hash for comparison
   const createNormalizedHash = useCallback(
     (
@@ -699,15 +705,6 @@ const PlayPage: React.FC = () => {
     if (!allCashedOut) {
       alert('All players must cash out before ending the session.');
       return;
-    }
-
-    // Validate zero-sum
-    const validation = validateZeroSum(activeSessionId, activePlayerSessions);
-    if (!validation.isValid) {
-      const proceed = confirm(
-        `Warning: Session doesn't balance. Difference: ${formatMoney(validation.difference)}. End anyway?`,
-      );
-      if (!proceed) return;
     }
 
     // Save session data to localStorage for potential resume
@@ -1309,8 +1306,9 @@ const PlayPage: React.FC = () => {
         <div className="flex justify-end">
           <button
             onClick={handleEndSession}
-            disabled={isSavingToSheet}
-            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''}`}
+            disabled={isSavingToSheet || !sessionBalances}
+            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet || !sessionBalances ? 'opacity-50 cursor-wait' : ''}`}
+            title={!sessionBalances ? "Session doesn't balance to zero" : ''}
           >
             {isSavingToSheet ? 'Saving...' : 'End Session'}
           </button>
