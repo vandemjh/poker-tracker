@@ -78,7 +78,24 @@ const PlayPage: React.FC = () => {
   const [isSavingToSheet, setIsSavingToSheet] = useState(false);
   const [showEndSessionModal, setShowEndSessionModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showBalanceWarning, setShowBalanceWarning] = useState(false);
+  const [balanceWarningFading, setBalanceWarningFading] = useState(false);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
+
+  useEffect(() => {
+    if (showBalanceWarning) {
+      setBalanceWarningFading(false);
+      const fadeTimer = setTimeout(() => setBalanceWarningFading(true), 3500);
+      const removeTimer = setTimeout(() => {
+        setShowBalanceWarning(false);
+        setBalanceWarningFading(false);
+      }, 4000);
+      return () => {
+        clearTimeout(fadeTimer);
+        clearTimeout(removeTimer);
+      };
+    }
+  }, [showBalanceWarning]);
   const [isSyncingInProgress, setIsSyncingInProgress] = useState(false);
   const [remoteInProgressGame, setRemoteInProgressGame] = useState<{
     date: Date;
@@ -698,6 +715,12 @@ const PlayPage: React.FC = () => {
   const handleEndSession = async () => {
     if (!activeSessionId || !activeSession) return;
 
+    if (!sessionBalances) {
+      setShowBalanceWarning(true);
+      return;
+    }
+    setShowBalanceWarning(false);
+
     // Check if all players have cashed out
     const allCashedOut = activePlayerSessions.every(
       (ps) => ps.cashOut !== undefined,
@@ -1303,12 +1326,18 @@ const PlayPage: React.FC = () => {
       </div>
 
       <div className="card-nb md:p-6 p-3">
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-4">
+          {showBalanceWarning && (
+            <span
+              className={`text-xs sm:text-sm text-nb-red font-semibold transition-opacity duration-500 ${balanceWarningFading ? 'opacity-0' : 'opacity-100'}`}
+            >
+              Session must balance to $0.00 before ending
+            </span>
+          )}
           <button
             onClick={handleEndSession}
-            disabled={isSavingToSheet || !sessionBalances}
-            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ${isSavingToSheet || !sessionBalances ? 'opacity-50 cursor-wait' : ''}`}
-            title={!sessionBalances ? "Session doesn't balance to zero" : ''}
+            disabled={isSavingToSheet}
+            className={`btn-nb-danger text-sm py-2 px-4 whitespace-nowrap ml-auto ${isSavingToSheet ? 'opacity-50 cursor-wait' : ''} ${!sessionBalances && !isSavingToSheet ? 'opacity-30 cursor-not-allowed' : ''}`}
           >
             {isSavingToSheet ? 'Saving...' : 'End Session'}
           </button>
@@ -1720,7 +1749,7 @@ const PlayPage: React.FC = () => {
           const clipHeader = `${formattedDate} Cash-outs`;
           const clipboardText = [
             `${clipHeader}`,
-            [...clipHeader].map(_ => `═`).join(''),
+            [...clipHeader].map((_) => `═`).join(''),
             ...playerResults.map(
               (p) => `${p.name}:\t${formatMoney(p.cashOut)}`,
             ),
