@@ -258,6 +258,31 @@ const sessionsSlice = createSlice({
         }
       }
     },
+    removeBuyIn: (
+      state,
+      action: PayloadAction<{
+        playerSessionId: string;
+        buyInId: string;
+      }>,
+    ) => {
+      const playerSession = state.playerSessions.find(
+        (ps) => ps.id === action.payload.playerSessionId,
+      );
+      if (playerSession) {
+        playerSession.buyIns = playerSession.buyIns.filter(
+          (b) => b.id !== action.payload.buyInId,
+        );
+
+        // Recalculate netResult if player has cashed out
+        if (playerSession.cashOut !== undefined) {
+          const totalBuyIns = playerSession.buyIns.reduce(
+            (sum, b) => sum + b.amount,
+            0,
+          );
+          playerSession.netResult = playerSession.cashOut - totalBuyIns;
+        }
+      }
+    },
   },
 });
 
@@ -276,5 +301,6 @@ export const {
   importSessions,
   replaceImportedSessions,
   removePlayerFromSession,
+  removeBuyIn,
 } = sessionsSlice.actions;
 export default sessionsSlice.reducer;

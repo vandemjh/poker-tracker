@@ -18,6 +18,7 @@ import {
   addPlayer,
   setActiveSession,
   removePlayerFromSession,
+  removeBuyIn,
   markUnsyncedChanges,
   mergePlayers,
   replaceImportedSessions,
@@ -1503,6 +1504,25 @@ const PlayPage: React.FC = () => {
             ? getPlayerName(currentPlayerSession.playerId || '')
             : '';
 
+          const closeEditBuyInModal = () => {
+            setShowEditBuyInModal(null);
+            setEditBuyInAmount('');
+          };
+
+          const handleDeleteBuyIn = () => {
+            if (!currentPlayerSession) return;
+            dispatch(
+              removeBuyIn({
+                playerSessionId: showEditBuyInModal.playerSessionId,
+                buyInId: showEditBuyInModal.buyInId,
+              }),
+            );
+            dispatch(markUnsyncedChanges());
+            suspendPolling();
+            debouncedSync();
+            closeEditBuyInModal();
+          };
+
           return (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
               <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
@@ -1542,10 +1562,13 @@ const PlayPage: React.FC = () => {
                       Update
                     </button>
                     <button
-                      onClick={() => {
-                        setShowEditBuyInModal(null);
-                        setEditBuyInAmount('');
-                      }}
+                      onClick={handleDeleteBuyIn}
+                      className="btn-nb-danger text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={closeEditBuyInModal}
                       className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
                     >
                       Cancel
