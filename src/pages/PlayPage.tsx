@@ -1769,13 +1769,25 @@ const PlayPage: React.FC = () => {
             })
             .sort((a, b) => b.netResult - a.netResult);
 
-          const clipHeader = `${formattedDate} Cash-outs`;
+          const dateAndTitleStr = `${formattedDate} Cash-Outs`;
+          let cashOutStrings = playerResults.map(
+            (p) => `${p.name}: ${formatMoney(p.cashOut)}`,
+          );
+          const maxLineLength = Math.max(
+            dateAndTitleStr.length,
+            ...cashOutStrings.map((s) => s.length),
+          );
+          cashOutStrings = playerResults.map(
+            (p) => {
+              const padding = maxLineLength - 1 - (p.name.length + formatMoney(p.cashOut).length)
+              return `${p.name}:${''.padEnd(padding, " ")}${formatMoney(p.cashOut)}`
+            },
+          );
+          const clipHeader = dateAndTitleStr.padEnd(maxLineLength);
           const clipboardText = [
-            `${clipHeader}`,
-            [...clipHeader].map((_) => `═`).join(''),
-            ...playerResults.map(
-              (p) => `${p.name}:\t${formatMoney(p.cashOut)}`,
-            ),
+            clipHeader,
+            ''.padEnd(maxLineLength, '═'),
+            ...cashOutStrings,
           ].join('\n');
 
           const handleCopy = async () => {
