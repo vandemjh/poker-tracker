@@ -16,7 +16,6 @@ const INITIAL_APP_DATA: AppData = {
 // Google API scopes
 const SCOPES = [
   'https://www.googleapis.com/auth/drive.appdata',
-  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/userinfo.email',
