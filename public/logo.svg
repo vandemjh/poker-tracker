@@ -12,9 +12,9 @@
       <stop offset="0%" stop-color="#ffffff"/>
       <stop offset="100%" stop-color="#dfe6e9"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
-    </filter>
+    <!-- <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"> -->
+    <!--   <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/> -->
+    <!-- </filter> -->
     <filter id="glow">
       <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
       <feMerge>
@@ -25,26 +25,26 @@
   </defs>
 
   <!-- Background circle -->
-  <circle cx="200" cy="200" r="195" fill="url(#bg)" stroke="#00b894" stroke-width="6"/>
+  <!-- <circle cx="200" cy="200" r="195" fill="url(#bg)" stroke="#00b894" stroke-width="6"/> -->
 
   <!-- Ace of Spades overlay -->
-  <g transform="translate(125,125) scale(4)"  filter="url(#shadow)">
+  <g transform="translate(50,50) scale(8)"  filter="url(#shadow)">
     <!-- Spade shape -->
-    <path d="M32.799 20.336C32.799 11.456 18 .198 18 .198S3.201 11.456 3.201 20.336c0 6.946 8.175 10.172 12.766 5.173C15.631 29.688 11.247 33 7 33h.5a1.5 1.5 0 1 0 0 3h21a1.5 1.5 0 0 0 0-3h.5c-4.246 0-8.632-3.312-8.967-7.491c4.591 4.999 12.766 1.773 12.766-5.173z" fill="url(#spade)" stroke="#00b894" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M32.799 20.336C32.799 11.456 18 .198 18 .198S3.201 11.456 3.201 20.336c0 6.946 8.175 10.172 12.766 5.173C15.631 29.688 11.247 33 7 33h.5a1.5 1.5 0 1 0 0 3h21a1.5 1.5 0 0 0 0-3h.5c-4.246 0-8.632-3.312-8.967-7.491c4.591 4.999 12.766 1.773 12.766-5.173z" fill="#000000" stroke="#ffffff" stroke-width="1" stroke-linejoin="round"/>
   </g>
 
   <!-- Trend line -->
-  <polyline points="80,310 115,270 150,240 190,250 230,200 270,160 310,120"
+  <polyline points="80,270 115,255 150,220 190,230 230,180 270,200 310,130"
     fill="none" stroke="url(#graphLine)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
 
   <!-- Dots on trend line -->
-  <circle cx="80" cy="310" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="115" cy="270" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="150" cy="240" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="190" cy="250" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="230" cy="200" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="270" cy="160" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
-  <circle cx="310" cy="120" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="80" cy="270" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="115" cy="255" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="150" cy="220" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="190" cy="230" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="230" cy="180" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="270" cy="200" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
+  <circle cx="310" cy="130" r="7" fill="#ffffff" stroke="#00b894" stroke-width="2.5"/>
 
 </svg>
 
