@@ -320,6 +320,26 @@ const Layout: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
         <Outlet />
       </main>
+
+      <footer
+        className="border-t-4 py-4 mt-8 transition-colors duration-200"
+        style={{
+          backgroundColor: 'var(--color-bg-card)',
+          borderColor: 'var(--color-border)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-center gap-4 text-sm text-theme-secondary">
+          <span>&copy; {new Date().getFullYear()} Poker Tracker</span>
+          <span>&middot;</span>
+          <a href="./privacy" className="hover:text-nb-blue transition-colors">
+            Privacy Policy
+          </a>
+          <span>&middot;</span>
+          <a href="./terms" className="hover:text-nb-blue transition-colors">
+            Terms of Service
+          </a>
+        </div>
+      </footer>
     </div>
   );
 };

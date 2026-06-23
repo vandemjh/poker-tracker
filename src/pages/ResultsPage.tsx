@@ -7,6 +7,7 @@ import {
   selectAllPlayers,
   clearPlayerSelection,
   setSortColumn,
+  toggleImportModal,
 } from '../store';
 import {
   calculateAllPlayerStatistics,
@@ -237,13 +238,69 @@ const ResultsPage: React.FC = () => {
 
   if (players.length === 0) {
     return (
-      <div className="card-nb text-center py-12">
-        <div className="text-6xl mb-4">📊</div>
-        <h2 className="mb-4">No Data Yet</h2>
-        <p className="text-theme-secondary mb-6">
-          Link a Google Sheet or start a new game session to see your
-          statistics.
-        </p>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="card-nb text-center py-12">
+          <div className="text-6xl mb-4">🃏</div>
+          <h1 className="mb-4">Poker Tracker</h1>
+          <p className="text-xl text-theme-secondary mb-6 max-w-xl mx-auto">
+            Track poker game sessions, player statistics, and balance history.
+            Works entirely in your browser or sync with Google Sheets.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 mb-6">
+            <button
+              onClick={() => dispatch(toggleImportModal())}
+              className="px-6 py-3 font-semibold border-3 bg-nb-blue text-nb-white hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100"
+              style={{
+                borderColor: 'var(--color-border)',
+                boxShadow: '4px 4px 0px 0px var(--color-shadow)',
+              }}
+            >
+              Link a Google Sheet
+            </button>
+          </div>
+        </div>
+
+        <div className="card-nb">
+          <h2 className="mb-4">How It Works</h2>
+          <div className="grid md:grid-cols-3 gap-6 text-center">
+            <div>
+              <div className="text-4xl mb-2">📋</div>
+              <h3 className="mb-1">Record Sessions</h3>
+              <p className="text-theme-secondary text-sm">
+                Log poker games with players, buy-ins, and cash-outs to track
+                every session.
+              </p>
+            </div>
+            <div>
+              <div className="text-4xl mb-2">📈</div>
+              <h3 className="mb-1">View Statistics</h3>
+              <p className="text-theme-secondary text-sm">
+                See player profit/loss, win rates, balance trends, and detailed
+                performance metrics.
+              </p>
+            </div>
+            <div>
+              <div className="text-4xl mb-2">☁️</div>
+              <h3 className="mb-1">Sync to Google Sheets</h3>
+              <p className="text-theme-secondary text-sm">
+                Optionally connect your Google account to sync data across
+                devices via Google Sheets.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card-nb text-sm text-theme-secondary">
+          <h3 className="mb-2">Data Usage Transparency</h3>
+          <p className="mb-2">
+            Poker Tracker stores all data locally in your browser. If you choose
+            to connect a Google account, we access your name and email for
+            authentication only, and read/write poker data to the spreadsheet
+            you specify. We do not collect, sell, or share your personal data
+            with any third parties. Google account connection is entirely
+            optional and used solely for data synchronization.
+          </p>
+        </div>
       </div>
     );
   }

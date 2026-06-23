@@ -6,6 +6,8 @@ import Layout from './components/Layout';
 import ResultsPage from './pages/ResultsPage';
 import PlayPage from './pages/PlayPage';
 import SettingsPage from './pages/SettingsPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 import CSVImportModal from './components/CSVImportModal';
 
 // Google OAuth Client ID - Replace with your own
@@ -21,6 +23,8 @@ function AppContent() {
           <Route index element={<ResultsPage />} />
           <Route path="play" element={<PlayPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="privacy" element={<PrivacyPolicyPage />} />
+          <Route path="terms" element={<TermsOfServicePage />} />
         </Route>
       </Routes>
       <CSVImportModal />
