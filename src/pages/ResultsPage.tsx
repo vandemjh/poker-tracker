@@ -18,6 +18,8 @@ import {
   parseLocalDate,
 } from '../utils/statistics';
 import BalanceChart from '../components/BalanceChart';
+import PlayerBadge from '../components/PlayerBadge';
+import { getPlayerColors, getContrastTextColor } from '../utils/playerColors';
 import type { PlayerStatistics } from '../types';
 
 const ResultsPage: React.FC = () => {
@@ -368,20 +370,34 @@ const ResultsPage: React.FC = () => {
           >
             {selectedPlayers.length === 0 ? 'All' : 'Toggle All'}
           </button>
-          {top10Players.map((stat) => (
-            <button
-              key={stat.playerId}
-              onClick={() => dispatch(togglePlayerSelection(stat.playerId))}
-              className={`badge-nb cursor-pointer transition-colors ${
-                selectedPlayers.length === 0 ||
-                selectedPlayers.includes(stat.playerId)
-                  ? 'bg-nb-blue text-nb-white'
-                  : 'bg-theme-card'
-              }`}
-            >
-              {stat.playerName}
-            </button>
-          ))}
+          {top10Players.map((stat) => {
+            const { color, suitChar } = getPlayerColors(stat.playerName);
+            const isSelected =
+              selectedPlayers.length === 0 ||
+              selectedPlayers.includes(stat.playerId);
+            return (
+              <button
+                key={stat.playerId}
+                onClick={() => dispatch(togglePlayerSelection(stat.playerId))}
+                className="cursor-pointer transition-all rounded-full border-2 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap"
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: color,
+                        borderColor: color,
+                        color: getContrastTextColor(color),
+                      }
+                    : {
+                        backgroundColor: 'transparent',
+                        borderColor: `${color}66`,
+                        color,
+                      }
+                }
+              >
+                {suitChar} {stat.playerName}
+              </button>
+            );
+          })}
 
           {/* Dropdown for other players */}
           {otherPlayers.length > 0 && (
@@ -434,7 +450,7 @@ const ResultsPage: React.FC = () => {
                               : ''
                           }`}
                         >
-                          <span>{stat.playerName}</span>
+                          <PlayerBadge name={stat.playerName} />
                           <span className="text-xs opacity-70">
                             {stat.sessionCount} games
                           </span>
@@ -518,7 +534,7 @@ const ResultsPage: React.FC = () => {
                       ).map((w, i) => (
                         <span key={w.name + i} className="ml-2">
                           {i > 0 ? ' • ' : ''}
-                          <span className="status-positive">{w.name}</span>
+                          <PlayerBadge name={w.name} />
                           <span className="text-theme-secondary">
                             {' '}
                             {formatMoneyWithSign(w.netResult)}
@@ -553,7 +569,7 @@ const ResultsPage: React.FC = () => {
                       ).map((l, i) => (
                         <span key={l.name + i} className="ml-2">
                           {i > 0 ? ' • ' : ''}
-                          <span className="status-negative">{l.name}</span>
+                          <PlayerBadge name={l.name} />
                           <span className="text-theme-secondary">
                             {' '}
                             {formatMoneyWithSign(l.netResult)}
@@ -664,7 +680,9 @@ const ResultsPage: React.FC = () => {
           <tbody>
             {sortedStatistics.map((stat) => (
               <tr key={stat.playerId}>
-                <td className="font-semibold">{stat.playerName}</td>
+                <td className="font-semibold">
+                  <PlayerBadge name={stat.playerName} />
+                </td>
                 <td
                   className={
                     stat.totalProfit >= 0

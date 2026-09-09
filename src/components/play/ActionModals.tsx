@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PlayerBadge from '../PlayerBadge';
 
 // --- BuyIn Modal ---
 
@@ -117,7 +118,7 @@ export const EditBuyInModal: React.FC<EditBuyInModalProps> = ({
         <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Edit Buy-in</h3>
         {playerName && (
           <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
-            Player: {playerName}
+            Player: <PlayerBadge name={playerName} />
           </p>
         )}
         <div className="space-y-3 sm:space-y-4">
@@ -203,7 +204,7 @@ export const CashOutModal: React.FC<CashOutModalProps> = ({
         </h3>
         {playerName && (
           <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
-            Player: {playerName}
+            Player: <PlayerBadge name={playerName} />
           </p>
         )}
         <div className="space-y-3 sm:space-y-4">
@@ -264,7 +265,9 @@ export const RemovePlayerModal: React.FC<RemovePlayerModalProps> = ({
         <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">Remove Player</h3>
         <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
           Are you sure you want to remove{' '}
-          <span className="font-semibold text-theme-text">{playerName}</span>{' '}
+          <span className="font-semibold text-theme-text">
+            <PlayerBadge name={playerName} />
+          </span>{' '}
           from the session? Their buy-ins and cash-out will be lost.
         </p>
         <div className="flex gap-3">

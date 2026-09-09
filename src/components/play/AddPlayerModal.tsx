@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { getPlayerSuitChar } from '../../utils/playerColors';
 import type { AddPlayerToSessionForm } from '../../types';
 
 interface AddPlayerModalProps {
@@ -94,7 +95,8 @@ export const AddPlayerModal: React.FC<AddPlayerModalProps> = ({
                       color: alreadyInSession ? '#9ca3af' : 'inherit',
                     }}
                   >
-                    {p.name} ({gameCount} {gameCount === 1 ? 'game' : 'games'})
+                    {getPlayerSuitChar(p.name)} {p.name} (
+                    {gameCount} {gameCount === 1 ? 'game' : 'games'})
                     {alreadyInSession ? ' — In session' : ''}
                   </option>
                 );

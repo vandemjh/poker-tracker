@@ -5,6 +5,7 @@ import {
   formatMoneyWithSign,
   parseLocalDate,
 } from '../../utils/statistics';
+import PlayerBadge from '../PlayerBadge';
 import type { Session, PlayerSession } from '../../types';
 
 interface ActiveSessionViewProps {
@@ -173,7 +174,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                 return (
                   <tr key={ps.id}>
                     <td className="px-1 py-1.5 md:px-4 md:py-3 font-semibold whitespace-nowrap text-xs md:text-sm">
-                      {getPlayerName(ps.playerId)}
+                      <PlayerBadge name={getPlayerName(ps.playerId)} />
                     </td>
                     <td className="px-1 py-1.5 md:px-4 md:py-3">
                       <div className="flex flex-wrap gap-0.5 md:gap-1 items-center">

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { formatMoney, formatMoneyWithSign } from '../../utils/statistics';
+import PlayerBadge from '../PlayerBadge';
 import type { Player, PlayerSession, Session } from '../../types';
 
 // --- JoinGame Modal ---
@@ -45,7 +46,9 @@ export const JoinGameModal: React.FC<JoinGameModalProps> = ({
               className="flex justify-between py-1 border-b"
               style={{ borderColor: 'var(--color-border)' }}
             >
-              <span className="font-semibold">{p.playerName}</span>
+              <span className="font-semibold">
+                <PlayerBadge name={p.playerName} />
+              </span>
               <span className="whitespace-nowrap ml-2">
                 {formatMoney(p.totalBuyIn)}
                 {p.cashOut !== undefined && ` / ${formatMoney(p.cashOut)}`}
@@ -204,7 +207,7 @@ export const EndSessionSummaryModal: React.FC<EndSessionSummaryModalProps> = ({
               className="flex justify-between items-center py-1.5 border-b border-theme last:border-b-0"
             >
               <span className="font-semibold text-sm sm:text-base truncate mr-2">
-                {p.name}
+                <PlayerBadge name={p.name} />
               </span>
               <div className="flex gap-4 sm:gap-6 tabular-nums text-sm sm:text-base">
                 <span className="w-16 sm:w-20 text-right">

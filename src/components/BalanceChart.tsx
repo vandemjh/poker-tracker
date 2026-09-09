@@ -14,6 +14,7 @@ import { Line } from 'react-chartjs-2';
 import type { PlayerStatistics } from '../types';
 import { formatMoney, formatDateShort } from '../utils/statistics';
 import { useTheme } from '../hooks/useTheme';
+import { getPlayerColors } from '../utils/playerColors';
 
 // Register Chart.js components
 ChartJS.register(
@@ -25,20 +26,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-// Neo-brutalist color palette for chart lines
-const CHART_COLORS = [
-  '#0088FF', // Blue
-  '#FF6B9D', // Pink
-  '#00D26A', // Green
-  '#FF9500', // Orange
-  '#A855F7', // Purple
-  '#00CED1', // Cyan
-  '#FF3B30', // Red
-  '#BFFF00', // Lime
-  '#FFE500', // Yellow
-  '#6366F1', // Indigo
-];
 
 interface BalanceChartProps {
   data: PlayerStatistics[];
@@ -83,8 +70,8 @@ const BalanceChart: React.FC<BalanceChartProps> = ({
   const labels = sortedDates.map((date) => formatDateShort(date));
 
   // Create dataset for each player
-  const datasets = activeData.map((player, index) => {
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+  const datasets = activeData.map((player) => {
+    const { color, suitChar } = getPlayerColors(player.playerName);
 
     // Create a map of date to balance for this player
     const balanceMap = new Map<string, number>();
@@ -126,7 +113,7 @@ const BalanceChart: React.FC<BalanceChartProps> = ({
     });
 
     return {
-      label: player.playerName,
+      label: `${suitChar} ${player.playerName}`,
       data: filledData,
       borderColor: color,
       backgroundColor: color,
