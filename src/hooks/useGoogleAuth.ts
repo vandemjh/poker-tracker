@@ -14,6 +14,7 @@ import {
   setPlayers,
   setSessions,
   setPlayerSessions,
+  showRequestErrorModal,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
 import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
@@ -222,6 +223,21 @@ export function useGoogleAuth() {
       googleDriveService.setOnAuthRequired(null);
     };
   }, [loginWithHint]);
+
+  // Show a modal when Google returns a failed response (403, 429, etc.)
+  useEffect(() => {
+    googleDriveService.setOnRequestFailed((status) => {
+      const message =
+        status === 403
+          ? 'You do not have access to perform this action. Check that your Google account has permission to the linked spreadsheet and try again.'
+          : `Google API request failed (status ${status}). Please try again later.`;
+      dispatch(showRequestErrorModal(message));
+    });
+
+    return () => {
+      googleDriveService.setOnRequestFailed(null);
+    };
+  }, [dispatch]);
 
   const handleLogout = () => {
     googleLogout();

@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import CSVImportModal from './components/CSVImportModal';
+import RequestErrorModal from './components/RequestErrorModal';
 
 // Google OAuth Client ID - Replace with your own
 // Get one from: https://console.cloud.google.com/
@@ -28,6 +29,7 @@ function AppContent() {
         </Route>
       </Routes>
       <CSVImportModal />
+      <RequestErrorModal />
     </BrowserRouter>
   );
 }

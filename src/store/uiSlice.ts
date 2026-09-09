@@ -19,6 +19,8 @@ interface UIState {
   isInitializing: boolean; // True while checking for stored data on app load
   error: string | null;
   showImportModal: boolean;
+  showRequestErrorModal: boolean;
+  requestError: string | null;
   dateFilter: DateRangeFilter;
   selectedPlayers: string[];
   sortColumn: string;
@@ -36,6 +38,8 @@ const initialState: UIState = {
   isInitializing: true, // Start as true, set to false once initialization is complete
   error: null,
   showImportModal: false,
+  showRequestErrorModal: false,
+  requestError: null,
   dateFilter: {
     startDate: null,
     endDate: null,
@@ -76,6 +80,14 @@ const uiSlice = createSlice({
     },
     setShowImportModal: (state, action: PayloadAction<boolean>) => {
       state.showImportModal = action.payload;
+    },
+    showRequestErrorModal: (state, action: PayloadAction<string>) => {
+      state.showRequestErrorModal = true;
+      state.requestError = action.payload;
+    },
+    hideRequestErrorModal: (state) => {
+      state.showRequestErrorModal = false;
+      state.requestError = null;
     },
     setDateFilter: (state, action: PayloadAction<DateRangeFilter>) => {
       state.dateFilter = action.payload;
@@ -152,6 +164,8 @@ export const {
   clearError,
   toggleImportModal,
   setShowImportModal,
+  showRequestErrorModal,
+  hideRequestErrorModal,
   setDateFilter,
   clearDateFilter,
   setSelectedPlayers,

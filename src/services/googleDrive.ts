@@ -35,6 +35,7 @@ class GoogleDriveService {
   private accessToken: string | null = null;
   private fileId: string | null = null;
   private onAuthRequiredCallback: AuthRequiredCallback | null = null;
+  private onRequestFailedCallback: ((status: number) => void) | null = null;
   private isReauthenticating: boolean = false;
   private reauthPromise: Promise<boolean> | null = null;
 
@@ -42,6 +43,12 @@ class GoogleDriveService {
   // The callback should trigger the auth flow and resolve to true if successful
   setOnAuthRequired(callback: AuthRequiredCallback | null) {
     this.onAuthRequiredCallback = callback;
+  }
+
+  // Register a callback to be called when Google returns a failed response
+  // (e.g. 403 Forbidden, 429 rate limit). The callback should warn the user.
+  setOnRequestFailed(callback: ((status: number) => void) | null) {
+    this.onRequestFailedCallback = callback;
   }
 
   setAccessToken(token: string, persist: boolean = true) {
@@ -118,6 +125,10 @@ class GoogleDriveService {
     );
 
     if (!response.ok) {
+      this.notifyRequestFailed(
+        response.status,
+        'https://www.googleapis.com/oauth2/v2/userinfo',
+      );
       throw new Error('Failed to fetch user info');
     }
 
@@ -149,6 +160,14 @@ class GoogleDriveService {
     }
   }
 
+  // Notify the UI that Google returned a failed response (e.g. 403, 429)
+  private notifyRequestFailed(status: number, url: string) {
+    console.warn('Google API request failed:', status, url);
+    if (this.onRequestFailedCallback) {
+      this.onRequestFailedCallback(status);
+    }
+  }
+
   // Trigger re-authentication and wait for it to complete
   private async triggerReauth(): Promise<boolean> {
     // If already re-authenticating, wait for that to complete
@@ -176,7 +195,6 @@ class GoogleDriveService {
   private async makeRequest(
     url: string,
     options: RequestInit = {},
-    retryCount: number = 0,
   ): Promise<Response> {
     if (!this.accessToken) {
       throw new Error('Not authenticated');
@@ -190,24 +208,24 @@ class GoogleDriveService {
       },
     });
 
-    // Handle token expiration (401 Unauthorized)
-    if (response.status === 401 && retryCount < 1) {
-      console.log('Token expired, attempting re-authentication...');
-
-      const reauthSuccess = await this.triggerReauth();
-
-      if (reauthSuccess && this.accessToken) {
-        console.log('Re-authentication successful, retrying request...');
-        // Retry the request with the new token
-        return this.makeRequest(url, options, retryCount + 1);
-      } else {
-        throw new Error('Re-authentication failed. Please sign in again.');
-      }
+    // Token expired (401) - trigger re-auth to restore the session, but never
+    // retry the failed request
+    if (response.status === 401) {
+      console.log('Token expired, triggering re-authentication...');
+      await this.triggerReauth();
+      throw new Error('Your session expired. Please try the action again.');
     }
 
+    // Any failed response (403 Forbidden, 429 rate limit, 5xx, etc.) - do not
+    // retry, warn the user
     if (!response.ok) {
+      this.notifyRequestFailed(response.status, url);
       const errorText = await response.text();
-      throw new Error(`Google API error: ${response.status} - ${errorText}`);
+      const message =
+        response.status === 403
+          ? `You do not have access to perform this action. Google API error: ${response.status} - ${errorText}`
+          : `Google API error: ${response.status} - ${errorText}`;
+      throw new Error(message);
     }
 
     return response;
@@ -296,6 +314,10 @@ class GoogleDriveService {
         );
 
         if (!response.ok) {
+          this.notifyRequestFailed(
+            response.status,
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+          );
           throw new Error(`Failed to create file: ${response.status}`);
         }
 
