@@ -297,10 +297,44 @@ export function processCSVFile(file: File): Promise<ParsedCSVData> {
   });
 }
 
+// Normalize the Totals sheet orientation for parsing.
+// Legacy layout: dates in the header row (one game per column), players down
+// column A. New (transposed) layout: dates down column A (one game per row),
+// players across the header row. Detects the new layout and transposes it back
+// into the legacy layout the parser expects.
+function normalizeSheetOrientation(
+  data: (string | number | null | undefined)[][],
+): (string | number | null | undefined)[][] {
+  const headerRow = data[0] ?? [];
+  const hasDatesInHeader = headerRow
+    .slice(1)
+    .some((value) => parseDateValue(value) !== null);
+  const hasDatesInFirstColumn = data
+    .slice(1)
+    .some((row) => parseDateValue(row[0]) !== null);
+
+  if (!hasDatesInHeader && hasDatesInFirstColumn) {
+    const cols = Math.max(0, ...data.map((row) => row.length));
+    const transposed: (string | number | null | undefined)[][] = [];
+    for (let c = 0; c < cols; c++) {
+      transposed[c] = [];
+      for (let r = 0; r < data.length; r++) {
+        transposed[c].push(data[r]?.[c] ?? null);
+      }
+    }
+    return transposed;
+  }
+
+  return data;
+}
+
 // Parse spreadsheet data from Google Sheets API (array of arrays)
 export function parseSpreadsheetData(
   data: (string | number | null | undefined)[][],
 ): ParsedCSVData {
+  // Handle the transposed layout (dates as rows, players as columns)
+  data = normalizeSheetOrientation(data);
+
   const errors: CSVImportError[] = [];
   const warnings: CSVImportWarning[] = [];
   const players: Player[] = [];

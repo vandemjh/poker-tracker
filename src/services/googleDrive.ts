@@ -428,10 +428,11 @@ class GoogleDriveService {
     return firstSheet?.properties.title || metadata.sheets[0].properties.title;
   }
 
-  // Append or update a session column in the Totals sheet
-  // If a column with the same date exists, it updates that column
-  // Otherwise, it appends a new column to the right
-  async appendSessionColumn(
+  // Append or update a session row in the Totals sheet
+  // Layout (transposed): each row is a game date, each column is a player
+  // If a row with the same date exists, it updates that row
+  // Otherwise, it appends a new row at the bottom
+  async appendSessionRow(
     spreadsheetId: string,
     sessionDate: Date,
     playerResults: { playerName: string; netResult: number }[],
@@ -440,7 +441,7 @@ class GoogleDriveService {
       // Get the totals sheet name
       const sheetName = await this.getTotalsSheetName(spreadsheetId);
 
-      // Get existing data to find the rightmost column and player rows
+      // Get existing data to find player columns and existing game rows
       const dataResponse = await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
       );
@@ -454,90 +455,115 @@ class GoogleDriveService {
       // Format the date string for comparison
       const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
 
-      // Check if a column with this date already exists
+      // Header row maps player names to their column index
       const headerRow = rows[0] || [];
-      let existingColIndex = -1;
-
+      const playerColMap = new Map<
+        string,
+        { col: number; displayName: string }
+      >();
       for (let i = 1; i < headerRow.length; i++) {
-        const headerValue = headerRow[i];
-        let headerDateStr = '';
+        const displayName = String(headerRow[i] ?? '').trim();
+        if (displayName) {
+          playerColMap.set(displayName.toLowerCase(), { col: i, displayName });
+        }
+      }
+
+      // Check if a row with this date already exists (scan the date column)
+      let existingRowIndex = -1;
+      for (let r = 1; r < rows.length; r++) {
+        const cell = rows[r]?.[0];
+        let rowDateStr = '';
 
         // Handle both string dates and serial number dates
-        if (typeof headerValue === 'number') {
-          // Convert serial date to date string
-          const serialDate = this.serialDateToDate(headerValue);
+        if (typeof cell === 'number') {
+          const serialDate = this.serialDateToDate(cell);
           if (serialDate) {
-            headerDateStr = `${serialDate.getMonth() + 1}/${serialDate.getDate()}/${serialDate.getFullYear()}`;
+            rowDateStr = `${serialDate.getMonth() + 1}/${serialDate.getDate()}/${serialDate.getFullYear()}`;
           }
-        } else if (typeof headerValue === 'string') {
-          headerDateStr = headerValue.trim();
+        } else if (typeof cell === 'string') {
+          rowDateStr = cell.trim();
         }
 
-        if (headerDateStr === dateStr) {
-          existingColIndex = i;
+        if (rowDateStr === dateStr) {
+          existingRowIndex = r;
           break;
         }
       }
 
-      // Find the rightmost column with data (for appending new column)
-      let maxCol = 0;
+      // Find the rightmost column with data (for appending new players)
+      let maxCol = 1; // Column A holds the game date
       for (const row of rows) {
         if (row.length > maxCol) {
           maxCol = row.length;
         }
       }
 
-      // Use existing column if found, otherwise append to the right
-      const targetColIndex =
-        existingColIndex !== -1 ? existingColIndex : maxCol;
+      // Assign columns for any new players and build the row values
+      const rowValues: (string | number)[] = [];
+      let nextNewCol = maxCol;
+      const newPlayers: { name: string; col: number }[] = [];
 
-      // Create a map of player names to row indices (case-insensitive)
-      const playerRowMap = new Map<string, number>();
-      for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '')
-          .trim()
-          .toLowerCase();
-        if (playerName) {
-          playerRowMap.set(playerName, i);
-        }
-      }
-
-      // Create column values array with the date in the header row
-      const columnValues: (string | number)[][] = [[dateStr]];
-
-      // Fill in player results
-      for (let i = 1; i < rows.length; i++) {
-        const playerName = String(rows[i]?.[0] ?? '')
-          .trim()
-          .toLowerCase();
-        const result = playerResults.find(
-          (pr) => pr.playerName.toLowerCase() === playerName,
-        );
-
-        if (result) {
-          columnValues.push([result.netResult]);
+      for (const pr of playerResults) {
+        const key = pr.playerName.trim().toLowerCase();
+        const mapped = playerColMap.get(key);
+        let col: number;
+        if (mapped) {
+          col = mapped.col;
         } else {
-          // Player didn't participate in this session
-          columnValues.push(['']);
+          col = nextNewCol;
+          nextNewCol++;
+          playerColMap.set(key, {
+            col,
+            displayName: pr.playerName.trim(),
+          });
+          newPlayers.push({ name: pr.playerName.trim(), col });
+        }
+        rowValues[col] = pr.netResult;
+      }
+
+      // Build the full row: date followed by one slot per player column
+      rowValues[0] = dateStr;
+      for (let i = 0; i < nextNewCol; i++) {
+        if (rowValues[i] === undefined) {
+          rowValues[i] = '';
         }
       }
 
-      // Check if any new players need to be added
-      const existingPlayers = new Set(playerRowMap.keys());
-      const newPlayers = playerResults.filter(
-        (pr) => !existingPlayers.has(pr.playerName.toLowerCase()),
-      );
+      // If there are new players (or the sheet is fresh), write the header row
+      if (newPlayers.length > 0) {
+        const headerValues: string[] = new Array<string>(nextNewCol).fill('');
+        headerValues[0] = 'Date';
+        for (const [, { displayName, col }] of playerColMap) {
+          headerValues[col] = displayName;
+        }
+        const headerRange = `${sheetName}!A1:${this.columnIndexToLetter(nextNewCol - 1)}1`;
 
-      // Add new players to the end
-      for (const newPlayer of newPlayers) {
-        columnValues.push([newPlayer.netResult]);
+        await this.makeRequest(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(headerRange)}?valueInputOption=USER_ENTERED`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              range: headerRange,
+              majorDimension: 'ROWS',
+              values: [headerValues],
+            }),
+          },
+        );
       }
 
-      // Convert column index to letter (A, B, C, ... AA, AB, etc.)
-      const colLetter = this.columnIndexToLetter(targetColIndex);
-      const range = `${sheetName}!${colLetter}1:${colLetter}${columnValues.length}`;
+      // Determine which row to write (row 1 is the header)
+      const targetRowIndex =
+        existingRowIndex !== -1
+          ? existingRowIndex
+          : Math.max(1, rows.length); // Fresh sheet: first game goes in row 2
+      const rowNum = targetRowIndex + 1;
+      const colLetter = this.columnIndexToLetter(nextNewCol - 1);
+      const range = `${sheetName}!A${rowNum}:${colLetter}${rowNum}`;
 
-      // Write the column (either new or updating existing)
+      // Write the row (either new or updating existing)
       await this.makeRequest(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
         {
@@ -547,35 +573,14 @@ class GoogleDriveService {
           },
           body: JSON.stringify({
             range,
-            majorDimension: 'COLUMNS',
-            values: [columnValues.map((v) => v[0])],
+            majorDimension: 'ROWS',
+            values: [rowValues],
           }),
         },
       );
 
-      // If there are new players, we need to add their names in column A
-      if (newPlayers.length > 0) {
-        const startRow = rows.length + 1;
-        const namesRange = `${sheetName}!A${startRow}:A${startRow + newPlayers.length - 1}`;
-
-        await this.makeRequest(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(namesRange)}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              range: namesRange,
-              majorDimension: 'ROWS',
-              values: newPlayers.map((p) => [p.playerName]),
-            }),
-          },
-        );
-      }
-
       console.log(
-        existingColIndex !== -1
+        existingRowIndex !== -1
           ? 'Successfully updated existing session in spreadsheet'
           : 'Successfully appended new session to spreadsheet',
       );

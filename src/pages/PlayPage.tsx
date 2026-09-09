@@ -313,7 +313,7 @@ const PlayPage: React.FC = () => {
           };
         });
 
-        await googleDriveService.appendSessionColumn(
+        await googleDriveService.appendSessionRow(
           importedSpreadsheetId,
           sessionDate,
           playerResults,

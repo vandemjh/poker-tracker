@@ -248,48 +248,48 @@ const CSVImportModal: React.FC = () => {
               </p>
             </div>
 
-            <div
-              className="mt-6 p-4 border-3"
-              style={{
-                backgroundColor: 'var(--color-bg-card)',
-                borderColor: 'var(--color-border)',
-              }}
-            >
-              <h3 className="text-lg font-semibold mb-2">
-                Expected Spreadsheet Format
-              </h3>
-              <div className="overflow-x-auto">
+<div
+                className="mt-6 p-4 border-3"
+                style={{
+                  backgroundColor: 'var(--color-bg-card)',
+                  borderColor: 'var(--color-border)',
+                }}
+              >
+                <h3 className="text-lg font-semibold mb-2">
+                  Expected Spreadsheet Format
+                </h3>
+                <div className="overflow-x-auto">
                 <table
                   className="text-xs border-2 w-full"
                   style={{ borderColor: 'var(--color-border)' }}
                 >
                   <thead>
                     <tr className="bg-nb-black text-nb-white">
-                      <th className="p-2 border-r border-gray-600">Players</th>
-                      <th className="p-2 border-r border-gray-600">1/2/2025</th>
-                      <th className="p-2 border-r border-gray-600">1/8/2025</th>
+                      <th className="p-2 border-r border-gray-600">Date</th>
+                      <th className="p-2 border-r border-gray-600">Zach</th>
+                      <th className="p-2 border-r border-gray-600">Jack V</th>
                       <th className="p-2">...</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr className="border-t border-theme">
                       <td className="p-2 border-r border-theme font-semibold">
-                        Zach
+                        1/2/2025
                       </td>
                       <td className="p-2 border-r border-theme text-nb-red">
                         -$30.00
                       </td>
-                      <td className="p-2 border-r border-theme text-nb-red">
-                        -$26.50
+                      <td className="p-2 border-r border-theme text-nb-green">
+                        $41.00
                       </td>
                       <td className="p-2">...</td>
                     </tr>
                     <tr className="border-t border-theme">
                       <td className="p-2 border-r border-theme font-semibold">
-                        Jack V
+                        1/8/2025
                       </td>
-                      <td className="p-2 border-r border-theme text-nb-green">
-                        $41.00
+                      <td className="p-2 border-r border-theme text-nb-red">
+                        -$26.50
                       </td>
                       <td className="p-2 border-r border-theme text-nb-green">
                         $25.75
@@ -298,18 +298,19 @@ const CSVImportModal: React.FC = () => {
                     </tr>
                   </tbody>
                 </table>
+                </div>
+                <ul className="text-sm mt-3 space-y-1">
+                  <li>
+                    First row: "Date" followed by player names
+                  </li>
+                  <li>
+                    Subsequent rows: Game date followed by each player's
+                    profit/loss
+                  </li>
+                  <li>Supports both $XX.XX and plain numbers</li>
+                  <li>Empty cells indicate player did not participate</li>
+                </ul>
               </div>
-              <ul className="text-sm mt-3 space-y-1">
-                <li>
-                  First row: "Players" followed by date columns (MM/DD/YYYY)
-                </li>
-                <li>
-                  Subsequent rows: Player name followed by profit/loss values
-                </li>
-                <li>Supports both $XX.XX and plain numbers</li>
-                <li>Empty cells indicate player did not participate</li>
-              </ul>
-            </div>
           </>
         )}
 
