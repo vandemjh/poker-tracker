@@ -8,6 +8,7 @@ import {
   removePlayerFromSession,
   clearUnsyncedChanges,
   setSyncStatus,
+  reconcileSessionMiscounts,
 } from '../store';
 import { getLocalDateString, parseLocalDate } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
@@ -16,7 +17,12 @@ const POLL_INTERVAL = 30000;
 
 interface RemoteGame {
   date: Date;
-  players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
+  players: {
+    playerName: string;
+    totalBuyIn: number;
+    cashOut?: number;
+    miscounts?: number;
+  }[];
 }
 
 export function useSessionSync() {
@@ -25,6 +31,7 @@ export function useSessionSync() {
   const { sessions, playerSessions, activeSessionId } = useAppSelector(
     (state) => state.sessions,
   );
+  const { miscounts } = useAppSelector((state) => state.miscounts);
   const { importedSpreadsheetId, isGoogleConnected } = useAppSelector(
     (state) => state.ui,
   );
@@ -59,12 +66,23 @@ export function useSessionSync() {
     }, 3000);
   }, []);
 
+  const getActiveMiscountCounts = useCallback((): Map<string, number> => {
+    const counts = new Map<string, number>();
+    for (const m of miscounts) {
+      if (m.sessionId === activeSessionId && m.playerId) {
+        counts.set(m.playerId, (counts.get(m.playerId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [miscounts, activeSessionId]);
+
   const createNormalizedHash = useCallback(
     (
       playerData: {
         playerName: string;
         totalBuyIn: number;
         cashOut?: number;
+        miscounts?: number;
       }[],
     ) => {
       const normalized = playerData
@@ -72,6 +90,7 @@ export function useSessionSync() {
           name: p.playerName.toLowerCase().trim(),
           buyIn: Math.round(p.totalBuyIn * 100),
           cashOut: p.cashOut !== undefined ? Math.round(p.cashOut * 100) : null,
+          miscounts: Math.round(p.miscounts ?? 0),
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return JSON.stringify(normalized);
@@ -93,6 +112,7 @@ export function useSessionSync() {
       return;
     }
 
+    const miscountCounts = getActiveMiscountCounts();
     const playerData = activePlayerSessions.map((ps) => {
       const player = players.find((p) => p.id === ps.playerId);
       const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
@@ -100,6 +120,7 @@ export function useSessionSync() {
         playerName: player?.name || 'Unknown',
         totalBuyIn,
         cashOut: ps.cashOut,
+        miscounts: miscountCounts.get(ps.playerId) || 0,
       };
     });
 
@@ -148,6 +169,7 @@ export function useSessionSync() {
     activePlayerSessions,
     players,
     createNormalizedHash,
+    getActiveMiscountCounts,
   ]);
 
   const debouncedSync = useCallback(() => {
@@ -184,6 +206,11 @@ export function useSessionSync() {
         }
 
         let pendingCashOuts = 0;
+        const remoteMiscountPayload: {
+          playerId: string | null;
+          playerName: string;
+          count: number;
+        }[] = [];
 
         for (const remotePlayer of remoteGame.players) {
           let localPlayer = state.players.players.find(
@@ -211,6 +238,14 @@ export function useSessionSync() {
                 buyInAmount: remotePlayer.totalBuyIn,
               }),
             );
+
+            if ((remotePlayer.miscounts ?? 0) > 0) {
+              remoteMiscountPayload.push({
+                playerId: localPlayer.id,
+                playerName: localPlayer.name,
+                count: remotePlayer.miscounts!,
+              });
+            }
 
             if (remotePlayer.cashOut !== undefined) {
               pendingCashOuts++;
@@ -246,6 +281,13 @@ export function useSessionSync() {
           remoteGame.players.sort((a, b) =>
             a.playerName.localeCompare(b.playerName),
           ),
+        );
+
+        dispatch(
+          reconcileSessionMiscounts({
+            sessionId: newSessionId,
+            players: remoteMiscountPayload,
+          }),
         );
 
         if (pendingCashOuts === 0) {
@@ -300,6 +342,7 @@ export function useSessionSync() {
         return;
       }
 
+      const miscountCounts = getActiveMiscountCounts();
       const localPlayerData = activePlayerSessions.map((ps) => {
         const player = players.find((p) => p.id === ps.playerId);
         const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
@@ -307,6 +350,7 @@ export function useSessionSync() {
           playerName: player?.name || 'Unknown',
           totalBuyIn,
           cashOut: ps.cashOut,
+          miscounts: miscountCounts.get(ps.playerId) || 0,
         };
       });
 
@@ -401,6 +445,25 @@ export function useSessionSync() {
         }
       }
 
+      dispatch(
+        reconcileSessionMiscounts({
+          sessionId: activeSessionId,
+          players: remoteGame.players
+            .filter((p) => (p.miscounts ?? 0) > 0)
+            .map((p) => {
+              const localPlayer = players.find(
+                (pl) =>
+                  pl.name.toLowerCase() === p.playerName.toLowerCase(),
+              );
+              return {
+                playerId: localPlayer?.id ?? null,
+                playerName: p.playerName,
+                count: p.miscounts!,
+              };
+            }),
+        }),
+      );
+
       lastSyncedDataRef.current = remoteHash;
     } catch (error) {
       console.error('Error polling for updates:', error);
@@ -415,6 +478,7 @@ export function useSessionSync() {
     dispatch,
     isSyncingInProgress,
     createNormalizedHash,
+    getActiveMiscountCounts,
   ]);
 
   useEffect(() => {

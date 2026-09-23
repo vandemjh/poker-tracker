@@ -14,10 +14,15 @@ import {
   setPlayers,
   setSessions,
   setPlayerSessions,
+  setMiscounts,
   showRequestErrorModal,
 } from '../store';
 import { googleDriveService, SCOPES } from '../services/googleDrive';
-import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import {
+  parseSpreadsheetData,
+  remapPlayerIds,
+  parseMiscountSheetData,
+} from '../utils/csvImport';
 import { loadLocalData } from '../services/localDataService';
 
 export function useGoogleAuth() {
@@ -51,6 +56,14 @@ export function useGoogleAuth() {
             playerSessions: result.playerSessions,
           }),
         );
+
+        const miscountRows =
+          await googleDriveService.getMiscounts(spreadsheetId);
+        const parsedMiscounts = parseMiscountSheetData(
+          miscountRows,
+          result.players,
+        );
+        dispatch(setMiscounts(parsedMiscounts));
 
         dispatch(
           setSyncStatus({
@@ -180,6 +193,7 @@ export function useGoogleAuth() {
           dispatch(setPlayers(localData.players));
           dispatch(setSessions(localData.sessions));
           dispatch(setPlayerSessions(localData.playerSessions));
+          dispatch(setMiscounts(localData.miscounts || []));
         }
       }
 

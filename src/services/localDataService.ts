@@ -1,4 +1,4 @@
-import type { Player, Session, PlayerSession } from '../types';
+import type { Player, Session, PlayerSession, Miscount } from '../types';
 
 const STORAGE_KEY = 'poker-tracker-local-data';
 
@@ -6,6 +6,7 @@ interface LocalAppData {
   players: Player[];
   sessions: Session[];
   playerSessions: PlayerSession[];
+  miscounts: Miscount[];
   lastModified: string;
 }
 
@@ -13,11 +14,13 @@ export function saveLocalData(
   players: Player[],
   sessions: Session[],
   playerSessions: PlayerSession[],
+  miscounts: Miscount[],
 ): void {
   const data: LocalAppData = {
     players,
     sessions,
     playerSessions,
+    miscounts,
     lastModified: new Date().toISOString(),
   };
   try {

@@ -240,6 +240,89 @@ export const CashOutModal: React.FC<CashOutModalProps> = ({
   );
 };
 
+// --- Miscount Modal ---
+
+interface MiscountModalProps {
+  isOpen: boolean;
+  playerSessionId: string | null;
+  playerName: string;
+  onConfirm: (playerSessionId: string, amount: number) => void;
+  onCancel: () => void;
+}
+
+export const MiscountModal: React.FC<MiscountModalProps> = ({
+  isOpen,
+  playerSessionId,
+  playerName,
+  onConfirm,
+  onCancel,
+}) => {
+  const [amount, setAmount] = useState('');
+
+  useEffect(() => {
+    if (isOpen) setAmount('');
+  }, [isOpen]);
+
+  if (!isOpen || !playerSessionId) return null;
+
+  const handleConfirm = () => {
+    const parsed = parseFloat(amount);
+    if (!isNaN(parsed) && parsed > 0) {
+      onConfirm(playerSessionId, parsed);
+      setAmount('');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
+      <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">
+          Report Miscount
+        </h3>
+        {playerName && (
+          <p className="text-xs sm:text-sm text-theme-secondary mb-0.5">
+            Player: <PlayerBadge name={playerName} />
+          </p>
+        )}
+        <p className="text-xs sm:text-sm text-theme-secondary mb-3 sm:mb-4">
+          Record how much this player was off by (reported wrong total).
+        </p>
+        <div className="space-y-3 sm:space-y-4">
+          <div>
+            <label className="block text-sm font-semibold mb-1">Amount</label>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input-nb py-2 sm:py-3"
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleConfirm}
+              className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+            >
+              Report
+            </button>
+            <button
+              onClick={() => {
+                setAmount('');
+                onCancel();
+              }}
+              className="btn-nb text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- RemovePlayer Modal ---
 
 interface RemovePlayerModalProps {

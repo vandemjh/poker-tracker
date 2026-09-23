@@ -2,6 +2,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import playersReducer from './playersSlice';
 import sessionsReducer from './sessionsSlice';
 import uiReducer from './uiSlice';
+import miscountsReducer from './miscountsSlice';
 import { saveLocalData } from '../services/localDataService';
 
 export const store = configureStore({
@@ -9,6 +10,7 @@ export const store = configureStore({
     players: playersReducer,
     sessions: sessionsReducer,
     ui: uiReducer,
+    miscounts: miscountsReducer,
   },
 });
 
@@ -25,6 +27,7 @@ store.subscribe(() => {
       state.players.players,
       state.sessions.sessions,
       state.sessions.playerSessions,
+      state.miscounts.miscounts,
     );
   }, 500);
 });
@@ -33,3 +36,4 @@ store.subscribe(() => {
 export * from './playersSlice';
 export * from './sessionsSlice';
 export * from './uiSlice';
+export * from './miscountsSlice';

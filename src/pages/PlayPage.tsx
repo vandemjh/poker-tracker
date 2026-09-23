@@ -18,10 +18,16 @@ import {
   clearUnsyncedChanges,
   setSyncStatus,
   updateBuyIn,
+  addMiscount,
+  setMiscounts,
 } from '../store';
 import { parseLocalDate, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
-import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import {
+  parseSpreadsheetData,
+  remapPlayerIds,
+  parseMiscountSheetData,
+} from '../utils/csvImport';
 import { useSessionSync } from '../hooks/useSessionSync';
 import { NoSessionView } from '../components/play/NoSessionView';
 import { ActiveSessionView } from '../components/play/ActiveSessionView';
@@ -31,6 +37,7 @@ import {
   EditBuyInModal,
   CashOutModal,
   RemovePlayerModal,
+  MiscountModal,
 } from '../components/play/ActionModals';
 import {
   JoinGameModal,
@@ -56,6 +63,7 @@ const PlayPage: React.FC = () => {
   const { sessions, playerSessions, activeSessionId } = useAppSelector(
     (state) => state.sessions,
   );
+  const { miscounts } = useAppSelector((state) => state.miscounts);
   const { importedSpreadsheetId, isGoogleConnected, settings } = useAppSelector(
     (state) => state.ui,
   );
@@ -80,6 +88,9 @@ const PlayPage: React.FC = () => {
     buyInId: string;
   } | null>(null);
   const [showCashOutModal, setShowCashOutModal] = useState<string | null>(null);
+  const [showMiscountModal, setShowMiscountModal] = useState<string | null>(
+    null,
+  );
   const [showRemovePlayerModal, setShowRemovePlayerModal] = useState<
     string | null
   >(null);
@@ -143,6 +154,17 @@ const PlayPage: React.FC = () => {
   const activePlayerIds = useMemo(() => {
     return new Set(activePlayerSessions.map((ps) => ps.playerId));
   }, [activePlayerSessions]);
+
+  const activeMiscountCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!activeSessionId) return counts;
+    for (const m of miscounts) {
+      if (m.sessionId === activeSessionId && m.playerId) {
+        counts.set(m.playerId, (counts.get(m.playerId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [miscounts, activeSessionId]);
 
   const getPlayerName = useCallback(
     (playerId: string) => {
@@ -242,15 +264,67 @@ const PlayPage: React.FC = () => {
     [dispatch, suspendPolling, debouncedSync],
   );
 
+  const persistMiscount = useCallback(
+    (
+      playerSessionId: string,
+      amount: number,
+      source: 'manual' | 'cashout-edit',
+    ) => {
+      const playerSession = activePlayerSessions.find(
+        (ps) => ps.id === playerSessionId,
+      );
+      if (!playerSession || !activeSessionId) return;
+
+      const player = players.find((p) => p.id === playerSession.playerId);
+      const playerName = player?.name || 'Unknown';
+
+      dispatch(
+        addMiscount({
+          playerId: playerSession.playerId,
+          playerName,
+          sessionId: activeSessionId,
+          amount: Math.abs(amount),
+          source,
+        }),
+      );
+      dispatch(markUnsyncedChanges());
+    },
+    [dispatch, activePlayerSessions, activeSessionId, players],
+  );
+
   const handleCashOut = useCallback(
     (playerSessionId: string, amount: number) => {
+      const playerSession = activePlayerSessions.find(
+        (ps) => ps.id === playerSessionId,
+      );
+      if (
+        playerSession &&
+        playerSession.cashOut !== undefined &&
+        Math.abs(amount - playerSession.cashOut) > 0.01
+      ) {
+        persistMiscount(
+          playerSessionId,
+          Math.abs(amount - playerSession.cashOut),
+          'cashout-edit',
+        );
+      }
       dispatch(setCashOut({ playerSessionId, amount }));
       dispatch(markUnsyncedChanges());
       suspendPolling();
       debouncedSync();
       setShowCashOutModal(null);
     },
-    [dispatch, suspendPolling, debouncedSync],
+    [dispatch, suspendPolling, debouncedSync, activePlayerSessions, persistMiscount],
+  );
+
+  const handleReportMiscount = useCallback(
+    (playerSessionId: string, amount: number) => {
+      persistMiscount(playerSessionId, amount, 'manual');
+      suspendPolling();
+      debouncedSync();
+      setShowMiscountModal(null);
+    },
+    [persistMiscount, suspendPolling, debouncedSync],
   );
 
   const handleRemovePlayer = useCallback(
@@ -319,6 +393,27 @@ const PlayPage: React.FC = () => {
           playerResults,
         );
 
+        const sessionMiscounts = miscounts.filter(
+          (m) => m.sessionId === activeSessionId,
+        );
+        if (sessionMiscounts.length > 0) {
+          const miscountTotals = new Map<string, number>();
+          for (const m of sessionMiscounts) {
+            miscountTotals.set(
+              m.playerName,
+              (miscountTotals.get(m.playerName) || 0) + 1,
+            );
+          }
+          await googleDriveService.appendMiscountsRow(
+            importedSpreadsheetId,
+            sessionDate,
+            Array.from(miscountTotals, ([playerName, count]) => ({
+              playerName,
+              count,
+            })),
+          );
+        }
+
         dispatch(completeSession(activeSessionId));
 
         try {
@@ -342,6 +437,11 @@ const PlayPage: React.FC = () => {
               error: null,
             }),
           );
+
+          const miscountRows = await googleDriveService.getMiscounts(
+            importedSpreadsheetId,
+          );
+          dispatch(setMiscounts(parseMiscountSheetData(miscountRows, players)));
         } catch (syncError) {
           console.error('Error syncing after save:', syncError);
         }
@@ -370,6 +470,7 @@ const PlayPage: React.FC = () => {
     activePlayerSessions,
     players,
     navigate,
+    miscounts,
   ]);
 
   const handleResumeEndedSession = useCallback(
@@ -490,11 +591,16 @@ const PlayPage: React.FC = () => {
     ? activePlayerSessions.find((ps) => ps.id === showRemovePlayerModal)
     : undefined;
 
+  const currentMiscountPs = showMiscountModal
+    ? activePlayerSessions.find((ps) => ps.id === showMiscountModal)
+    : undefined;
+
   return (
     <div className="space-y-6">
       <ActiveSessionView
         activeSession={activeSession}
         activePlayerSessions={activePlayerSessions}
+        playerMiscountCounts={activeMiscountCounts}
         tableTotal={tableTotal}
         cashOutTotal={cashOutTotal}
         sessionBalances={sessionBalances}
@@ -510,6 +616,7 @@ const PlayPage: React.FC = () => {
           })
         }
         onCashOutClick={(id) => setShowCashOutModal(id)}
+        onReportMiscountClick={(id) => setShowMiscountModal(id)}
         onRemovePlayerClick={(id) => setShowRemovePlayerModal(id)}
         onEndSession={handleEndSession}
       />
@@ -563,6 +670,16 @@ const PlayPage: React.FC = () => {
         }
         onConfirm={handleRemovePlayer}
         onCancel={() => setShowRemovePlayerModal(null)}
+      />
+
+      <MiscountModal
+        isOpen={showMiscountModal !== null}
+        playerSessionId={showMiscountModal}
+        playerName={
+          currentMiscountPs ? getPlayerName(currentMiscountPs.playerId) : ''
+        }
+        onConfirm={handleReportMiscount}
+        onCancel={() => setShowMiscountModal(null)}
       />
 
       <JoinGameModal

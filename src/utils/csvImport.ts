@@ -9,6 +9,7 @@ import type {
   CSVImportError,
   CSVImportWarning,
   BuyIn,
+  Miscount,
 } from '../types';
 
 interface ParsedCSVData {
@@ -546,6 +547,32 @@ export function remapPlayerIds(
     players: allPlayers,
     playerSessions: remappedPlayerSessions,
   };
+}
+
+// Parse miscount rows from the "miscounts" sheet
+// Expected layout: header row (Date | Player | Amount), then one row per miscount
+export function parseMiscountSheetData(
+  rows: { date: string; playerName: string; amount: number }[],
+  players: Player[],
+): Miscount[] {
+  const playersByName = new Map(
+    players.map((p) => [p.name.toLowerCase(), p.id]),
+  );
+
+  return rows
+    .filter((row) => row.playerName.trim() && row.amount > 0)
+    .map((row) => {
+      const playerId = playersByName.get(row.playerName.toLowerCase()) || null;
+      return {
+        id: uuidv4(),
+        playerId,
+        playerName: row.playerName.trim(),
+        sessionId: null,
+        amount: Math.abs(row.amount),
+        source: 'manual' as const,
+        timestamp: new Date().toISOString(),
+      };
+    });
 }
 
 export function generateErrorLog(

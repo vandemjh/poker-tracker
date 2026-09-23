@@ -19,6 +19,7 @@ import {
 } from '../utils/statistics';
 import BalanceChart from '../components/BalanceChart';
 import PlayerBadge from '../components/PlayerBadge';
+import MiscountCard from '../components/MiscountCard';
 import { getPlayerColors, getContrastTextColor } from '../utils/playerColors';
 import type { PlayerStatistics } from '../types';
 
@@ -28,6 +29,7 @@ const ResultsPage: React.FC = () => {
   const { sessions, playerSessions } = useAppSelector(
     (state) => state.sessions,
   );
+  const { miscounts } = useAppSelector((state) => state.miscounts);
   const {
     dateFilter,
     selectedPlayers,
@@ -720,6 +722,9 @@ const ResultsPage: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Miscounts */}
+      <MiscountCard miscounts={miscounts} />
 
       {/* Errors Table */}
       {errorSessions.length > 0 && (

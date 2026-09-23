@@ -11,6 +11,7 @@ import type { Session, PlayerSession } from '../../types';
 interface ActiveSessionViewProps {
   activeSession: Session;
   activePlayerSessions: PlayerSession[];
+  playerMiscountCounts: Map<string, number>;
   tableTotal: number;
   cashOutTotal: number;
   sessionBalances: boolean;
@@ -21,6 +22,7 @@ interface ActiveSessionViewProps {
   onAddBuyInClick: (playerSessionId: string) => void;
   onEditBuyInClick: (playerSessionId: string, buyInId: string) => void;
   onCashOutClick: (playerSessionId: string) => void;
+  onReportMiscountClick: (playerSessionId: string) => void;
   onRemovePlayerClick: (playerSessionId: string) => void;
   onEndSession: () => void;
 }
@@ -28,6 +30,7 @@ interface ActiveSessionViewProps {
 export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   activeSession,
   activePlayerSessions,
+  playerMiscountCounts,
   tableTotal,
   cashOutTotal,
   sessionBalances,
@@ -38,6 +41,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   onAddBuyInClick,
   onEditBuyInClick,
   onCashOutClick,
+  onReportMiscountClick,
   onRemovePlayerClick,
   onEndSession,
 }) => {
@@ -159,6 +163,9 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                   Cash-out
                 </th>
                 <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">P/L</th>
+                <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">
+                  Miscounts
+                </th>
                 <th className="px-1 py-1.5 md:px-4 md:py-3 text-xs">Actions</th>
               </tr>
             </thead>
@@ -170,6 +177,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                 );
                 const netResult =
                   ps.cashOut !== undefined ? ps.cashOut - totalBuyIns : null;
+                const miscountCount = playerMiscountCounts.get(ps.playerId) || 0;
 
                 return (
                   <tr key={ps.id}>
@@ -240,6 +248,22 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                           -
                         </span>
                       )}
+                    </td>
+                    <td className="px-1 py-1.5 md:px-4 md:py-3 whitespace-nowrap">
+                      <div className="flex flex-wrap items-center gap-1 md:gap-2">
+                        {miscountCount > 0 && (
+                          <span className="font-bold text-nb-orange text-xs md:text-sm">
+                            {miscountCount}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => onReportMiscountClick(ps.id)}
+                          className="btn-nb text-xs py-0.5 px-1 md:py-1 md:px-2"
+                          title="Report a miscount"
+                        >
+                          Report
+                        </button>
+                      </div>
                     </td>
                     <td className="px-1 py-1.5 md:px-4 md:py-3">
                       <button

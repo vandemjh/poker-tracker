@@ -10,6 +10,7 @@ const INITIAL_APP_DATA: AppData = {
   players: [],
   sessions: [],
   playerSessions: [],
+  miscounts: [],
   lastModified: new Date().toISOString(),
 };
 
@@ -621,6 +622,7 @@ class GoogleDriveService {
   // Sheet names
   private readonly TOTALS_SHEET_NAME = 'Totals';
   private readonly IN_PROGRESS_SHEET_NAME = 'In Progress';
+  private readonly MICOUNTS_SHEET_NAME = 'Miscounts';
 
   // Helper to find or create a sheet by name
   private async ensureSheetExists(
@@ -693,12 +695,17 @@ class GoogleDriveService {
   // Update or create in-progress game data in the "In Progress" sheet
   // Format:
   // Row 1: Game date (MM/DD/YYYY)
-  // Row 2: Headers (Player, Buy-in, Cash-out)
+  // Row 2: Headers (Player, Buy-in, Cash-out, Miscounts)
   // Row 3+: Player data
   async updateInProgressSession(
     spreadsheetId: string,
     sessionDate: Date,
-    playerData: { playerName: string; totalBuyIn: number; cashOut?: number }[],
+    playerData: {
+      playerName: string;
+      totalBuyIn: number;
+      cashOut?: number;
+      miscounts?: number;
+    }[],
   ): Promise<void> {
     try {
       // Ensure the "In Progress" sheet exists
@@ -710,7 +717,7 @@ class GoogleDriveService {
       // Build the data to write
       const rows: (string | number)[][] = [
         [dateStr], // Row 1: Date
-        ['Player', 'Buy-in', 'Cash-out'], // Row 2: Headers
+        ['Player', 'Buy-in', 'Cash-out', 'Miscounts'], // Row 2: Headers
       ];
 
       // Add player data
@@ -719,15 +726,16 @@ class GoogleDriveService {
           player.playerName,
           player.totalBuyIn,
           player.cashOut !== undefined ? player.cashOut : '',
+          player.miscounts ?? 0,
         ]);
       }
 
       // Clear and write to the sheet
-      const range = `'${this.IN_PROGRESS_SHEET_NAME}'!A1:C${rows.length}`;
+      const range = `'${this.IN_PROGRESS_SHEET_NAME}'!A1:D${rows.length}`;
 
       // First clear the sheet
       await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C:clear`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:D:clear`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -793,7 +801,12 @@ class GoogleDriveService {
   // Get in-progress game data from the "In Progress" sheet
   async getInProgressGame(spreadsheetId: string): Promise<{
     date: Date;
-    players: { playerName: string; totalBuyIn: number; cashOut?: number }[];
+    players: {
+      playerName: string;
+      totalBuyIn: number;
+      cashOut?: number;
+      miscounts?: number;
+    }[];
   } | null> {
     try {
       // Check if the sheet exists
@@ -812,7 +825,7 @@ class GoogleDriveService {
 
       // Get the data
       const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:C?valueRenderOption=UNFORMATTED_VALUE`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${this.IN_PROGRESS_SHEET_NAME}'!A:D?valueRenderOption=UNFORMATTED_VALUE`,
       );
       const data = await dataResponse.json();
       const rows: (string | number)[][] = data.values || [];
@@ -839,6 +852,7 @@ class GoogleDriveService {
         playerName: string;
         totalBuyIn: number;
         cashOut?: number;
+        miscounts?: number;
       }[] = [];
 
       for (let i = 2; i < rows.length; i++) {
@@ -850,9 +864,14 @@ class GoogleDriveService {
           cashOutValue !== undefined && cashOutValue !== ''
             ? parseFloat(String(cashOutValue))
             : undefined;
+        const miscountsValue = row?.[3];
+        const miscounts =
+          miscountsValue !== undefined && miscountsValue !== ''
+            ? parseFloat(String(miscountsValue)) || 0
+            : undefined;
 
         if (playerName && totalBuyIn > 0) {
-          players.push({ playerName, totalBuyIn, cashOut });
+          players.push({ playerName, totalBuyIn, cashOut, miscounts });
         }
       }
 
@@ -862,6 +881,206 @@ class GoogleDriveService {
     } catch (error) {
       console.error('Error getting in-progress game:', error);
       return null;
+    }
+  }
+
+  // Format a cell value from a sheet as a displayable date string.
+  // Handles both date strings (MM/DD/YYYY) and Google Sheets serial numbers.
+  private formatSheetDate(value: string | number | undefined): string {
+    if (value === undefined || value === '') return '';
+    if (typeof value === 'number') {
+      const date = this.serialDateToDate(value);
+      if (date) {
+        return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+      }
+      return '';
+    }
+    return String(value).trim();
+  }
+
+  // Write miscount totals to the "Miscounts" sheet in the same layout as the
+  // "Totals" sheet: column A holds game dates, each subsequent column is a
+  // player, and cells hold the miscount count for that player on that date.
+  // Existing data is read first and merged, then the whole sheet is rewritten.
+  async appendMiscountsRow(
+    spreadsheetId: string,
+    sessionDate: Date,
+    playerMiscounts: { playerName: string; count: number }[],
+  ): Promise<void> {
+    try {
+      // Ensure the "Miscounts" sheet exists
+      await this.ensureSheetExists(spreadsheetId, this.MICOUNTS_SHEET_NAME);
+
+      const sheetName = this.MICOUNTS_SHEET_NAME;
+
+      // Fetch existing data
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
+      );
+      const existingData = await dataResponse.json();
+      const rows: (string | number)[][] = existingData.values || [];
+
+      // Existing data is laid out like the Totals sheet: header row
+      // (Date | <player names>) and one row per game date
+      const headerRow = rows[0] || [];
+
+      // Parse existing data into date -> player -> count
+      const dates = new Map<
+        string,
+        { dateStr: string; counts: Map<string, number> }
+      >();
+
+      if (headerRow[0]?.toString().trim().toLowerCase() === 'date') {
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          const dateStr = this.formatSheetDate(row[0]);
+          if (!dateStr) continue;
+          const entry: { dateStr: string; counts: Map<string, number> } = {
+            dateStr,
+            counts: new Map(),
+          };
+          for (let c = 1; c < headerRow.length; c++) {
+            const playerName = String(headerRow[c] ?? '').trim();
+            if (!playerName) continue;
+            const value = row?.[c];
+            const count =
+              value === undefined || value === ''
+                ? 0
+                : Number.isFinite(Number(value))
+                  ? Number(value)
+                  : 0;
+            if (count > 0) {
+              entry.counts.set(playerName, count);
+            }
+          }
+          if (entry.counts.size > 0) dates.set(dateStr, entry);
+        }
+      }
+
+      // Merge the current game's miscount totals
+      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+      let current = dates.get(dateStr);
+      if (!current) {
+        current = { dateStr, counts: new Map() };
+        dates.set(dateStr, current);
+      }
+      for (const pm of playerMiscounts) {
+        if (pm.count <= 0) continue;
+        const name = pm.playerName.trim();
+        current.counts.set(
+          name,
+          (current.counts.get(name) || 0) + pm.count,
+        );
+      }
+
+      // Build rows, preserving player column order
+      const playerOrder: string[] = [];
+      for (const { counts } of dates.values()) {
+        for (const name of counts.keys()) {
+          if (!playerOrder.includes(name)) playerOrder.push(name);
+        }
+      }
+
+      const output: (string | number)[][] = [['Date', ...playerOrder]];
+      const sortedDates = [...dates.values()].sort((a, b) =>
+        a.dateStr.localeCompare(b.dateStr),
+      );
+      for (const entry of sortedDates) {
+        const row: (string | number)[] = [entry.dateStr];
+        for (const name of playerOrder) {
+          const value = entry.counts.get(name);
+          row.push(value === undefined ? '' : value);
+        }
+        output.push(row);
+      }
+
+      // Clear and rewrite the sheet
+      const endCol = this.columnIndexToLetter(
+        Math.max(1, output[0].length - 1),
+      );
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A:${endCol}:clear`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      );
+
+      const range = `${sheetName}!A1:${endCol}${output.length}`;
+      await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            range,
+            majorDimension: 'ROWS',
+            values: output,
+          }),
+        },
+      );
+
+      console.log('Successfully updated miscounts sheet');
+    } catch (error) {
+      console.error('Error updating miscounts sheet:', error);
+      throw error;
+    }
+  }
+
+  // Read all miscount records from the "Miscounts" sheet
+  // Returns flattened records ({date, playerName, amount}) for the
+  // Totals-style layout, where each row is a game date, each column a player,
+  // and amount is the miscount count.
+  async getMiscounts(spreadsheetId: string): Promise<
+    { date: string; playerName: string; amount: number }[]
+  > {
+    try {
+      // Check if the sheet exists
+      const metaResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
+      );
+      const metadata = await metaResponse.json();
+      const miscountSheet = (
+        metadata.sheets as Array<{ properties: { title: string } }>
+      )?.find((s) => s.properties.title === this.MICOUNTS_SHEET_NAME);
+      if (!miscountSheet) {
+        return [];
+      }
+
+      const dataResponse = await this.makeRequest(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(this.MICOUNTS_SHEET_NAME)}!A:Z?valueRenderOption=UNFORMATTED_VALUE`,
+      );
+      const data = await dataResponse.json();
+      const rows: (string | number)[][] = data.values || [];
+
+      const miscounts: { date: string; playerName: string; amount: number }[] =
+        [];
+      if (rows.length < 1) {
+        return miscounts;
+      }
+
+      const headerRow = rows[0] || [];
+
+      // Totals-style layout: dates down column A, players across the header
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const date = this.formatSheetDate(row?.[0]);
+        if (!date) continue;
+        for (let c = 1; c < headerRow.length; c++) {
+          const playerName = String(headerRow[c] ?? '').trim();
+          if (!playerName) continue;
+          const amount = parseFloat(String(row?.[c] || '0')) || 0;
+          if (amount > 0) {
+            miscounts.push({ date, playerName, amount });
+          }
+        }
+      }
+
+      return miscounts;
+    } catch (error) {
+      console.error('Error getting miscounts from spreadsheet:', error);
+      return [];
     }
   }
 }

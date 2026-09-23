@@ -44,6 +44,16 @@ export interface BalanceHistoryEntry {
   sessionId: string;
 }
 
+export interface Miscount {
+  id: string;
+  playerId: string | null;
+  playerName: string;
+  sessionId: string | null;
+  amount: number; // Absolute amount miscounted by
+  source: 'cashout-edit' | 'manual';
+  timestamp: string;
+}
+
 export interface PlayerStatistics {
   playerId: string;
   playerName: string;
@@ -67,6 +77,7 @@ export interface AppData {
   players: Player[];
   sessions: Session[];
   playerSessions: PlayerSession[];
+  miscounts: Miscount[];
   lastModified: string;
 }
 

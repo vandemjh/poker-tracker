@@ -5,6 +5,7 @@ import {
   toggleImportModal,
   mergePlayers,
   replaceImportedSessions,
+  setMiscounts,
   clearUnsyncedChanges,
   setSyncStatus,
 } from '../store';
@@ -12,7 +13,11 @@ import GoogleAuthButton from './GoogleAuthButton';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import ThemeToggle from './ThemeToggle';
 import { googleDriveService } from '../services/googleDrive';
-import { parseSpreadsheetData, remapPlayerIds } from '../utils/csvImport';
+import {
+  parseSpreadsheetData,
+  remapPlayerIds,
+  parseMiscountSheetData,
+} from '../utils/csvImport';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 
 const Layout: React.FC = () => {
@@ -59,6 +64,14 @@ const Layout: React.FC = () => {
           playerSessions: result.playerSessions,
         }),
       );
+
+      const miscountRows =
+        await googleDriveService.getMiscounts(importedSpreadsheetId);
+      const parsedMiscounts = parseMiscountSheetData(
+        miscountRows,
+        result.players,
+      );
+      dispatch(setMiscounts(parsedMiscounts));
 
       // Mark as synced
       dispatch(clearUnsyncedChanges());
