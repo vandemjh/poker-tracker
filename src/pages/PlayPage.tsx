@@ -21,6 +21,7 @@ import {
   addMiscount,
   setMiscounts,
   setPlayerMiscount,
+  setSettings,
 } from '../store';
 import { parseLocalDate, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
@@ -301,7 +302,8 @@ const PlayPage: React.FC = () => {
       if (
         playerSession &&
         playerSession.cashOut !== undefined &&
-        Math.abs(amount - playerSession.cashOut) > 0.01
+        Math.abs(amount - playerSession.cashOut) > 0.01 &&
+        settings.autoMiscountEnabled
       ) {
         persistMiscount(
           playerSessionId,
@@ -315,7 +317,7 @@ const PlayPage: React.FC = () => {
       debouncedSync();
       setShowCashOutModal(null);
     },
-    [dispatch, suspendPolling, debouncedSync, activePlayerSessions, persistMiscount],
+    [dispatch, suspendPolling, debouncedSync, activePlayerSessions, persistMiscount, settings.autoMiscountEnabled],
   );
 
   const handleMiscount = useCallback(
@@ -631,6 +633,14 @@ const PlayPage: React.FC = () => {
         showBalanceWarning={showBalanceWarning}
         balanceWarningFading={balanceWarningFading}
         isSavingToSheet={isSavingToSheet}
+        autoMiscountEnabled={settings.autoMiscountEnabled}
+        onToggleAutoMiscount={() =>
+          dispatch(
+            setSettings({
+              autoMiscountEnabled: !settings.autoMiscountEnabled,
+            }),
+          )
+        }
         onAddPlayerClick={() => setShowAddPlayer(true)}
         onAddBuyInClick={(id) => setShowBuyInModal(id)}
         onEditBuyInClick={(psId, buyInId) =>

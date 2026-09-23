@@ -12,6 +12,7 @@ type Theme = 'system' | 'light' | 'dark';
 
 interface Settings {
   defaultBuyIn: number;
+  autoMiscountEnabled: boolean;
 }
 
 interface UIState {
@@ -59,6 +60,7 @@ const initialState: UIState = {
   theme: 'system',
   settings: {
     defaultBuyIn: 30,
+    autoMiscountEnabled: true,
   },
 };
 

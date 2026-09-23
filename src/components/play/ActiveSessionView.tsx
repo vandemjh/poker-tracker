@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import {
   formatMoney,
@@ -18,6 +18,8 @@ interface ActiveSessionViewProps {
   showBalanceWarning: boolean;
   balanceWarningFading: boolean;
   isSavingToSheet: boolean;
+  autoMiscountEnabled: boolean;
+  onToggleAutoMiscount: () => void;
   onAddPlayerClick: () => void;
   onAddBuyInClick: (playerSessionId: string) => void;
   onEditBuyInClick: (playerSessionId: string, buyInId: string) => void;
@@ -37,6 +39,8 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   showBalanceWarning,
   balanceWarningFading,
   isSavingToSheet,
+  autoMiscountEnabled,
+  onToggleAutoMiscount,
   onAddPlayerClick,
   onAddBuyInClick,
   onEditBuyInClick,
@@ -46,6 +50,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   onEndSession,
 }) => {
   const { players } = useAppSelector((state) => state.players);
+  const [showOptions, setShowOptions] = useState(false);
 
   const getPlayerName = (playerId: string) => {
     const player = players.find((p) => p.id === playerId);
@@ -55,24 +60,61 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Session Header */}
-      <div className="card-nb md:p-6 p-3">
-        <div className="min-w-0">
-          <h2 className="text-lg sm:text-2xl break-words leading-tight">
-            {activeSession.name ||
-              parseLocalDate(activeSession.date).toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-          </h2>
-          {(activeSession.stakes || activeSession.location) && (
-            <p className="text-sm text-theme-secondary break-words">
-              {activeSession.stakes}
-              {activeSession.stakes && activeSession.location && ' @ '}
-              {!activeSession.stakes && activeSession.location && '@ '}
-              {activeSession.location}
-            </p>
+      <div className="flex flex-col sm:flex-row items-stretch gap-3">
+        <div className="card-nb md:p-6 p-3 flex-1 min-w-0">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-2xl break-words leading-tight">
+              {activeSession.name ||
+                parseLocalDate(activeSession.date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+            </h2>
+            {(activeSession.stakes || activeSession.location) && (
+              <p className="text-sm text-theme-secondary break-words">
+                {activeSession.stakes}
+                {activeSession.stakes && activeSession.location && ' @ '}
+                {!activeSession.stakes && activeSession.location && '@ '}
+                {activeSession.location}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="w-full sm:w-52">
+          <button
+            onClick={() => setShowOptions((v) => !v)}
+            className="btn-nb text-sm py-2 px-4 w-full flex items-center justify-center gap-1"
+            aria-expanded={showOptions}
+          >
+            Options <span>{showOptions ? '▲' : '▼'}</span>
+          </button>
+          {showOptions && (
+            <div className="card-nb mt-2 p-3 md:p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs md:text-sm font-semibold">
+                  Auto update miscounts on cash-out edit
+                </span>
+                <button
+                  onClick={onToggleAutoMiscount}
+                  role="switch"
+                  aria-checked={autoMiscountEnabled}
+                  className={`btn-nb text-xs py-1 px-3 ${
+                    autoMiscountEnabled
+                      ? 'bg-nb-green text-nb-black'
+                      : 'bg-nb-orange text-nb-black'
+                  }`}
+                  title={
+                    autoMiscountEnabled
+                      ? 'Disable automatic miscount updates'
+                      : 'Enable automatic miscount updates'
+                  }
+                >
+                  {autoMiscountEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
