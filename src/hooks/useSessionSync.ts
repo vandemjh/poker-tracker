@@ -66,14 +66,17 @@ export function useSessionSync() {
     }, 3000);
   }, []);
 
-  const getActiveMiscountCounts = useCallback((): Map<string, number> => {
-    const counts = new Map<string, number>();
+  const getActiveMiscountTotals = useCallback((): Map<string, number> => {
+    const totals = new Map<string, number>();
     for (const m of miscounts) {
       if (m.sessionId === activeSessionId && m.playerId) {
-        counts.set(m.playerId, (counts.get(m.playerId) || 0) + 1);
+        totals.set(
+          m.playerId,
+          (totals.get(m.playerId) || 0) + Math.abs(m.amount),
+        );
       }
     }
-    return counts;
+    return totals;
   }, [miscounts, activeSessionId]);
 
   const createNormalizedHash = useCallback(
@@ -90,7 +93,7 @@ export function useSessionSync() {
           name: p.playerName.toLowerCase().trim(),
           buyIn: Math.round(p.totalBuyIn * 100),
           cashOut: p.cashOut !== undefined ? Math.round(p.cashOut * 100) : null,
-          miscounts: Math.round(p.miscounts ?? 0),
+          miscounts: Math.round((p.miscounts ?? 0) * 100),
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return JSON.stringify(normalized);
@@ -112,7 +115,7 @@ export function useSessionSync() {
       return;
     }
 
-    const miscountCounts = getActiveMiscountCounts();
+    const miscountTotals = getActiveMiscountTotals();
     const playerData = activePlayerSessions.map((ps) => {
       const player = players.find((p) => p.id === ps.playerId);
       const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
@@ -120,7 +123,7 @@ export function useSessionSync() {
         playerName: player?.name || 'Unknown',
         totalBuyIn,
         cashOut: ps.cashOut,
-        miscounts: miscountCounts.get(ps.playerId) || 0,
+        miscounts: miscountTotals.get(ps.playerId) || 0,
       };
     });
 
@@ -169,7 +172,7 @@ export function useSessionSync() {
     activePlayerSessions,
     players,
     createNormalizedHash,
-    getActiveMiscountCounts,
+    getActiveMiscountTotals,
   ]);
 
   const debouncedSync = useCallback(() => {
@@ -209,7 +212,7 @@ export function useSessionSync() {
         const remoteMiscountPayload: {
           playerId: string | null;
           playerName: string;
-          count: number;
+          amount: number;
         }[] = [];
 
         for (const remotePlayer of remoteGame.players) {
@@ -243,7 +246,7 @@ export function useSessionSync() {
               remoteMiscountPayload.push({
                 playerId: localPlayer.id,
                 playerName: localPlayer.name,
-                count: remotePlayer.miscounts!,
+                amount: remotePlayer.miscounts!,
               });
             }
 
@@ -342,7 +345,7 @@ export function useSessionSync() {
         return;
       }
 
-      const miscountCounts = getActiveMiscountCounts();
+      const miscountTotals = getActiveMiscountTotals();
       const localPlayerData = activePlayerSessions.map((ps) => {
         const player = players.find((p) => p.id === ps.playerId);
         const totalBuyIn = ps.buyIns.reduce((sum, b) => sum + b.amount, 0);
@@ -350,7 +353,7 @@ export function useSessionSync() {
           playerName: player?.name || 'Unknown',
           totalBuyIn,
           cashOut: ps.cashOut,
-          miscounts: miscountCounts.get(ps.playerId) || 0,
+          miscounts: miscountTotals.get(ps.playerId) || 0,
         };
       });
 
@@ -458,7 +461,7 @@ export function useSessionSync() {
               return {
                 playerId: localPlayer?.id ?? null,
                 playerName: p.playerName,
-                count: p.miscounts!,
+                amount: p.miscounts ?? 0,
               };
             }),
         }),
@@ -478,7 +481,7 @@ export function useSessionSync() {
     dispatch,
     isSyncingInProgress,
     createNormalizedHash,
-    getActiveMiscountCounts,
+    getActiveMiscountTotals,
   ]);
 
   useEffect(() => {

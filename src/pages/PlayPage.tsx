@@ -20,6 +20,7 @@ import {
   updateBuyIn,
   addMiscount,
   setMiscounts,
+  setPlayerMiscount,
 } from '../store';
 import { parseLocalDate, validateZeroSum } from '../utils/statistics';
 import { googleDriveService } from '../services/googleDrive';
@@ -155,15 +156,15 @@ const PlayPage: React.FC = () => {
     return new Set(activePlayerSessions.map((ps) => ps.playerId));
   }, [activePlayerSessions]);
 
-  const activeMiscountCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    if (!activeSessionId) return counts;
+  const activeMiscountTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    if (!activeSessionId) return totals;
     for (const m of miscounts) {
       if (m.sessionId === activeSessionId && m.playerId) {
-        counts.set(m.playerId, (counts.get(m.playerId) || 0) + 1);
+        totals.set(m.playerId, (totals.get(m.playerId) || 0) + Math.abs(m.amount));
       }
     }
-    return counts;
+    return totals;
   }, [miscounts, activeSessionId]);
 
   const getPlayerName = useCallback(
@@ -317,14 +318,37 @@ const PlayPage: React.FC = () => {
     [dispatch, suspendPolling, debouncedSync, activePlayerSessions, persistMiscount],
   );
 
-  const handleReportMiscount = useCallback(
+  const handleMiscount = useCallback(
     (playerSessionId: string, amount: number) => {
-      persistMiscount(playerSessionId, amount, 'manual');
+      const playerSession = activePlayerSessions.find(
+        (ps) => ps.id === playerSessionId,
+      );
+      if (!playerSession || !activeSessionId) return;
+
+      const player = players.find((p) => p.id === playerSession.playerId);
+      const playerName = player?.name || 'Unknown';
+
+      dispatch(
+        setPlayerMiscount({
+          playerId: playerSession.playerId,
+          playerName,
+          sessionId: activeSessionId,
+          amount,
+        }),
+      );
+      dispatch(markUnsyncedChanges());
       suspendPolling();
       debouncedSync();
       setShowMiscountModal(null);
     },
-    [persistMiscount, suspendPolling, debouncedSync],
+    [
+      dispatch,
+      activePlayerSessions,
+      activeSessionId,
+      players,
+      suspendPolling,
+      debouncedSync,
+    ],
   );
 
   const handleRemovePlayer = useCallback(
@@ -401,15 +425,15 @@ const PlayPage: React.FC = () => {
           for (const m of sessionMiscounts) {
             miscountTotals.set(
               m.playerName,
-              (miscountTotals.get(m.playerName) || 0) + 1,
+              (miscountTotals.get(m.playerName) || 0) + Math.abs(m.amount),
             );
           }
           await googleDriveService.appendMiscountsRow(
             importedSpreadsheetId,
             sessionDate,
-            Array.from(miscountTotals, ([playerName, count]) => ({
+            Array.from(miscountTotals, ([playerName, amount]) => ({
               playerName,
-              count,
+              amount,
             })),
           );
         }
@@ -600,7 +624,7 @@ const PlayPage: React.FC = () => {
       <ActiveSessionView
         activeSession={activeSession}
         activePlayerSessions={activePlayerSessions}
-        playerMiscountCounts={activeMiscountCounts}
+        playerMiscountTotals={activeMiscountTotals}
         tableTotal={tableTotal}
         cashOutTotal={cashOutTotal}
         sessionBalances={sessionBalances}
@@ -616,7 +640,7 @@ const PlayPage: React.FC = () => {
           })
         }
         onCashOutClick={(id) => setShowCashOutModal(id)}
-        onReportMiscountClick={(id) => setShowMiscountModal(id)}
+        onMiscountClick={(id) => setShowMiscountModal(id)}
         onRemovePlayerClick={(id) => setShowRemovePlayerModal(id)}
         onEndSession={handleEndSession}
       />
@@ -678,7 +702,12 @@ const PlayPage: React.FC = () => {
         playerName={
           currentMiscountPs ? getPlayerName(currentMiscountPs.playerId) : ''
         }
-        onConfirm={handleReportMiscount}
+        initialAmount={
+          currentMiscountPs
+            ? activeMiscountTotals.get(currentMiscountPs.playerId) || 0
+            : 0
+        }
+        onConfirm={handleMiscount}
         onCancel={() => setShowMiscountModal(null)}
       />
 

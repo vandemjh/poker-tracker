@@ -11,7 +11,7 @@ import type { Session, PlayerSession } from '../../types';
 interface ActiveSessionViewProps {
   activeSession: Session;
   activePlayerSessions: PlayerSession[];
-  playerMiscountCounts: Map<string, number>;
+  playerMiscountTotals: Map<string, number>;
   tableTotal: number;
   cashOutTotal: number;
   sessionBalances: boolean;
@@ -22,7 +22,7 @@ interface ActiveSessionViewProps {
   onAddBuyInClick: (playerSessionId: string) => void;
   onEditBuyInClick: (playerSessionId: string, buyInId: string) => void;
   onCashOutClick: (playerSessionId: string) => void;
-  onReportMiscountClick: (playerSessionId: string) => void;
+  onMiscountClick: (playerSessionId: string) => void;
   onRemovePlayerClick: (playerSessionId: string) => void;
   onEndSession: () => void;
 }
@@ -30,7 +30,7 @@ interface ActiveSessionViewProps {
 export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   activeSession,
   activePlayerSessions,
-  playerMiscountCounts,
+  playerMiscountTotals,
   tableTotal,
   cashOutTotal,
   sessionBalances,
@@ -41,7 +41,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
   onAddBuyInClick,
   onEditBuyInClick,
   onCashOutClick,
-  onReportMiscountClick,
+  onMiscountClick,
   onRemovePlayerClick,
   onEndSession,
 }) => {
@@ -177,7 +177,7 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                 );
                 const netResult =
                   ps.cashOut !== undefined ? ps.cashOut - totalBuyIns : null;
-                const miscountCount = playerMiscountCounts.get(ps.playerId) || 0;
+                const miscountTotal = playerMiscountTotals.get(ps.playerId) || 0;
 
                 return (
                   <tr key={ps.id}>
@@ -250,20 +250,24 @@ export const ActiveSessionView: React.FC<ActiveSessionViewProps> = ({
                       )}
                     </td>
                     <td className="px-1 py-1.5 md:px-4 md:py-3 whitespace-nowrap">
-                      <div className="flex flex-wrap items-center gap-1 md:gap-2">
-                        {miscountCount > 0 && (
-                          <span className="font-bold text-nb-orange text-xs md:text-sm">
-                            {miscountCount}
-                          </span>
-                        )}
+                      {miscountTotal > 0 ? (
                         <button
-                          onClick={() => onReportMiscountClick(ps.id)}
+                          onClick={() => onMiscountClick(ps.id)}
+                          className="font-semibold hover:text-nb-orange hover:underline cursor-pointer text-xs md:text-sm"
+                          title="Click to edit"
+                        >
+                          {formatMoney(miscountTotal)}{' '}
+                          <span className="ml-0.5 opacity-60">✏️</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onMiscountClick(ps.id)}
                           className="btn-nb text-xs py-0.5 px-1 md:py-1 md:px-2"
                           title="Report a miscount"
                         >
                           Report
                         </button>
-                      </div>
+                      )}
                     </td>
                     <td className="px-1 py-1.5 md:px-4 md:py-3">
                       <button

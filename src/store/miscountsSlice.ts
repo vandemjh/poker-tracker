@@ -38,6 +38,32 @@ const miscountsSlice = createSlice({
     setMiscounts: (state, action: PayloadAction<Miscount[]>) => {
       state.miscounts = action.payload;
     },
+    setPlayerMiscount: (
+      state,
+      action: PayloadAction<{
+        playerId: string | null;
+        playerName: string;
+        sessionId: string;
+        amount: number;
+      }>,
+    ) => {
+      const { playerId, playerName, sessionId, amount } = action.payload;
+      const key = playerId || playerName.toLowerCase();
+      state.miscounts = state.miscounts.filter(
+        (m) =>
+          m.sessionId !== sessionId ||
+          (m.playerId || m.playerName.toLowerCase()) !== key,
+      );
+      state.miscounts.push({
+        id: uuidv4(),
+        playerId,
+        playerName,
+        sessionId,
+        amount: Math.abs(amount),
+        source: 'manual',
+        timestamp: new Date().toISOString(),
+      });
+    },
     clearMiscounts: (state) => {
       state.miscounts = [];
     },
@@ -45,61 +71,32 @@ const miscountsSlice = createSlice({
       state,
       action: PayloadAction<{
         sessionId: string;
-        players: { playerId: string | null; playerName: string; count: number }[];
+        players: { playerId: string | null; playerName: string; amount: number }[];
       }>,
     ) => {
       const { sessionId, players } = action.payload;
 
-      // Track the target count per player for this session (keyed by
-      // playerId when known, otherwise by lowercased player name)
-      const target = new Map<string, number>();
+      // Reconcile miscounts for this session against the synced per-player
+      // values from the spreadsheet. Each player's miscounts collapse to a
+      // single record whose amount is the total value miscounted (keyed by
+      // playerId when known, otherwise by lowercased player name).
+      const keep = state.miscounts.filter((m) => m.sessionId !== sessionId);
+
       for (const p of players) {
-        target.set(p.playerId || p.playerName.toLowerCase(), p.count);
+        const amount = Math.abs(p.amount || 0);
+        if (amount <= 0) continue;
+        keep.push({
+          id: uuidv4(),
+          playerId: p.playerId ?? null,
+          playerName: p.playerName,
+          sessionId,
+          amount,
+          source: 'manual' as const,
+          timestamp: new Date().toISOString(),
+        });
       }
 
-      // Group existing records for this session by the same player key
-      const byKey = new Map<string, Miscount[]>();
-      for (const m of state.miscounts) {
-        if (m.sessionId !== sessionId) continue;
-        const key = m.playerId || m.playerName.toLowerCase();
-        const list = byKey.get(key) || [];
-        list.push(m);
-        byKey.set(key, list);
-      }
-
-      // Keep only the first `count` records per player for this session, and
-      // drop records for players that should no longer have any miscounts
-      state.miscounts = state.miscounts.filter((m) => {
-        if (m.sessionId !== sessionId) return true;
-        const key = m.playerId || m.playerName.toLowerCase();
-        const list = byKey.get(key) || [];
-        const desired = target.get(key);
-        if (desired === undefined || desired <= 0) return false;
-        return list.indexOf(m) < desired;
-      });
-
-      // Add synthetic records to match the target counts
-      for (const p of players) {
-        const key = p.playerId || p.playerName.toLowerCase();
-        if (p.count <= 0) continue;
-        const existing = state.miscounts.filter(
-          (m) =>
-            m.sessionId === sessionId &&
-            (m.playerId || m.playerName.toLowerCase()) === key,
-        ).length;
-        const toAdd = p.count - existing;
-        for (let i = 0; i < toAdd; i++) {
-          state.miscounts.push({
-            id: uuidv4(),
-            playerId: p.playerId,
-            playerName: p.playerName,
-            sessionId,
-            amount: 0,
-            source: 'manual',
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
+      state.miscounts = keep;
     },
   },
 });
@@ -107,6 +104,7 @@ const miscountsSlice = createSlice({
 export const {
   addMiscount,
   setMiscounts,
+  setPlayerMiscount,
   clearMiscounts,
   reconcileSessionMiscounts,
 } = miscountsSlice.actions;

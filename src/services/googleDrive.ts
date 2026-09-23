@@ -696,7 +696,7 @@ class GoogleDriveService {
   // Format:
   // Row 1: Game date (MM/DD/YYYY)
   // Row 2: Headers (Player, Buy-in, Cash-out, Miscounts)
-  // Row 3+: Player data
+  // Row 3+: Player data (Miscounts holds the total miscount value per player)
   async updateInProgressSession(
     spreadsheetId: string,
     sessionDate: Date,
@@ -900,12 +900,13 @@ class GoogleDriveService {
 
   // Write miscount totals to the "Miscounts" sheet in the same layout as the
   // "Totals" sheet: column A holds game dates, each subsequent column is a
-  // player, and cells hold the miscount count for that player on that date.
-  // Existing data is read first and merged, then the whole sheet is rewritten.
+  // player, and cells hold the total miscount value for that player on that
+  // date. Existing data is read first and merged, then the whole sheet is
+  // rewritten.
   async appendMiscountsRow(
     spreadsheetId: string,
     sessionDate: Date,
-    playerMiscounts: { playerName: string; count: number }[],
+    playerMiscounts: { playerName: string; amount: number }[],
   ): Promise<void> {
     try {
       // Ensure the "Miscounts" sheet exists
@@ -924,10 +925,10 @@ class GoogleDriveService {
       // (Date | <player names>) and one row per game date
       const headerRow = rows[0] || [];
 
-      // Parse existing data into date -> player -> count
+      // Parse existing data into date -> player -> value
       const dates = new Map<
         string,
-        { dateStr: string; counts: Map<string, number> }
+        { dateStr: string; values: Map<string, number> }
       >();
 
       if (headerRow[0]?.toString().trim().toLowerCase() === 'date') {
@@ -935,25 +936,25 @@ class GoogleDriveService {
           const row = rows[r];
           const dateStr = this.formatSheetDate(row[0]);
           if (!dateStr) continue;
-          const entry: { dateStr: string; counts: Map<string, number> } = {
+          const entry: { dateStr: string; values: Map<string, number> } = {
             dateStr,
-            counts: new Map(),
+            values: new Map(),
           };
           for (let c = 1; c < headerRow.length; c++) {
             const playerName = String(headerRow[c] ?? '').trim();
             if (!playerName) continue;
             const value = row?.[c];
-            const count =
+            const amount =
               value === undefined || value === ''
                 ? 0
                 : Number.isFinite(Number(value))
                   ? Number(value)
                   : 0;
-            if (count > 0) {
-              entry.counts.set(playerName, count);
+            if (amount > 0) {
+              entry.values.set(playerName, amount);
             }
           }
-          if (entry.counts.size > 0) dates.set(dateStr, entry);
+          if (entry.values.size > 0) dates.set(dateStr, entry);
         }
       }
 
@@ -961,22 +962,22 @@ class GoogleDriveService {
       const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
       let current = dates.get(dateStr);
       if (!current) {
-        current = { dateStr, counts: new Map() };
+        current = { dateStr, values: new Map() };
         dates.set(dateStr, current);
       }
       for (const pm of playerMiscounts) {
-        if (pm.count <= 0) continue;
+        if (pm.amount <= 0) continue;
         const name = pm.playerName.trim();
-        current.counts.set(
+        current.values.set(
           name,
-          (current.counts.get(name) || 0) + pm.count,
+          (current.values.get(name) || 0) + pm.amount,
         );
       }
 
       // Build rows, preserving player column order
       const playerOrder: string[] = [];
-      for (const { counts } of dates.values()) {
-        for (const name of counts.keys()) {
+      for (const { values } of dates.values()) {
+        for (const name of values.keys()) {
           if (!playerOrder.includes(name)) playerOrder.push(name);
         }
       }
@@ -988,7 +989,7 @@ class GoogleDriveService {
       for (const entry of sortedDates) {
         const row: (string | number)[] = [entry.dateStr];
         for (const name of playerOrder) {
-          const value = entry.counts.get(name);
+          const value = entry.values.get(name);
           row.push(value === undefined ? '' : value);
         }
         output.push(row);
@@ -1031,7 +1032,7 @@ class GoogleDriveService {
   // Read all miscount records from the "Miscounts" sheet
   // Returns flattened records ({date, playerName, amount}) for the
   // Totals-style layout, where each row is a game date, each column a player,
-  // and amount is the miscount count.
+  // and amount is the total miscount value for that date.
   async getMiscounts(spreadsheetId: string): Promise<
     { date: string; playerName: string; amount: number }[]
   > {

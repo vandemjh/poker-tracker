@@ -246,6 +246,7 @@ interface MiscountModalProps {
   isOpen: boolean;
   playerSessionId: string | null;
   playerName: string;
+  initialAmount?: number;
   onConfirm: (playerSessionId: string, amount: number) => void;
   onCancel: () => void;
 }
@@ -254,14 +255,16 @@ export const MiscountModal: React.FC<MiscountModalProps> = ({
   isOpen,
   playerSessionId,
   playerName,
+  initialAmount = 0,
   onConfirm,
   onCancel,
 }) => {
   const [amount, setAmount] = useState('');
+  const isEditing = initialAmount > 0;
 
   useEffect(() => {
-    if (isOpen) setAmount('');
-  }, [isOpen]);
+    if (isOpen) setAmount(isEditing ? String(initialAmount) : '');
+  }, [isOpen, initialAmount, isEditing]);
 
   if (!isOpen || !playerSessionId) return null;
 
@@ -277,7 +280,7 @@ export const MiscountModal: React.FC<MiscountModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50">
       <div className="card-nb w-full max-w-sm mx-0 sm:mx-4 p-3 sm:p-6">
         <h3 className="mb-3 sm:mb-4 text-base sm:text-xl">
-          Report Miscount
+          {isEditing ? 'Edit Miscount' : 'Report Miscount'}
         </h3>
         {playerName && (
           <p className="text-xs sm:text-sm text-theme-secondary mb-0.5">
@@ -305,7 +308,7 @@ export const MiscountModal: React.FC<MiscountModalProps> = ({
               onClick={handleConfirm}
               className="btn-nb-success text-sm py-2 px-4 sm:text-base sm:py-3 sm:px-6"
             >
-              Report
+              {isEditing ? 'Update' : 'Report'}
             </button>
             <button
               onClick={() => {
