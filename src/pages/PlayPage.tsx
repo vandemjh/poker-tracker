@@ -419,6 +419,20 @@ const PlayPage: React.FC = () => {
           playerResults,
         );
 
+        const playerBuyIns = activePlayerSessions.map((ps) => {
+          const player = players.find((p) => p.id === ps.playerId);
+          return {
+            playerName: player?.name || 'Unknown',
+            amount: ps.buyIns.reduce((sum, b) => sum + b.amount, 0),
+          };
+        });
+
+        await googleDriveService.appendBuyInsRow(
+          importedSpreadsheetId,
+          sessionDate,
+          playerBuyIns,
+        );
+
         const sessionMiscounts = miscounts.filter(
           (m) => m.sessionId === activeSessionId,
         );

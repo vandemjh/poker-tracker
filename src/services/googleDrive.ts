@@ -424,7 +424,7 @@ class GoogleDriveService {
     if (totalsSheet) return this.TOTALS_SHEET_NAME;
 
     const firstSheet = metadata.sheets?.find(
-      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME,
+      (s: any) => !this.AUXILIARY_SHEET_NAMES.includes(s.properties.title),
     );
     return firstSheet?.properties.title || metadata.sheets[0].properties.title;
   }
@@ -442,153 +442,200 @@ class GoogleDriveService {
       // Get the totals sheet name
       const sheetName = await this.getTotalsSheetName(spreadsheetId);
 
-      // Get existing data to find player columns and existing game rows
-      const dataResponse = await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
+      await this.writeDateRowToSheet(
+        spreadsheetId,
+        sheetName,
+        sessionDate,
+        playerResults.map((pr) => ({
+          playerName: pr.playerName,
+          amount: pr.netResult,
+        })),
       );
-      const existingData = await dataResponse.json();
-      const rows: (string | number)[][] = existingData.values || [];
 
-      if (rows.length === 0) {
-        throw new Error('Spreadsheet is empty');
+      console.log('Successfully updated spreadsheet');
+    } catch (error) {
+      console.error('Error saving session to spreadsheet:', error);
+      throw error;
+    }
+  }
+
+  // Write total buy-ins to the "Buy-Ins" sheet, using the same layout as the
+  // Totals sheet: column A holds game dates, each subsequent column is a
+  // player, and cells hold that player's total buy-in for that date. A date
+  // that already has a row is overwritten rather than accumulated, keeping the
+  // two sheets row-for-row aligned.
+  async appendBuyInsRow(
+    spreadsheetId: string,
+    sessionDate: Date,
+    playerBuyIns: { playerName: string; amount: number }[],
+  ): Promise<void> {
+    try {
+      // Ensure the "Buy-Ins" sheet exists
+      await this.ensureSheetExists(spreadsheetId, this.BUY_INS_SHEET_NAME);
+
+      await this.writeDateRowToSheet(
+        spreadsheetId,
+        this.BUY_INS_SHEET_NAME,
+        sessionDate,
+        playerBuyIns,
+        { allowEmptySheet: true },
+      );
+
+      console.log('Successfully updated buy-ins sheet');
+    } catch (error) {
+      console.error('Error saving buy-ins to spreadsheet:', error);
+      throw error;
+    }
+  }
+
+  // Write one row per game date into a Totals-style sheet (dates down column
+  // A, players across the header row). Reuses the row for the date when one
+  // already exists, otherwise appends below the last row, assigning a column
+  // to any player not yet in the header.
+  private async writeDateRowToSheet(
+    spreadsheetId: string,
+    sheetName: string,
+    sessionDate: Date,
+    playerAmounts: { playerName: string; amount: number }[],
+    options: { allowEmptySheet?: boolean } = {},
+  ): Promise<void> {
+    // Get existing data to find player columns and existing game rows
+    const dataResponse = await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`,
+    );
+    const existingData = await dataResponse.json();
+    const rows: (string | number)[][] = existingData.values || [];
+
+    if (rows.length === 0 && !options.allowEmptySheet) {
+      throw new Error('Spreadsheet is empty');
+    }
+
+    // Format the date string for comparison
+    const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
+
+    // Header row maps player names to their column index
+    const headerRow = rows[0] || [];
+    const playerColMap = new Map<
+      string,
+      { col: number; displayName: string }
+    >();
+    for (let i = 1; i < headerRow.length; i++) {
+      const displayName = String(headerRow[i] ?? '').trim();
+      if (displayName) {
+        playerColMap.set(displayName.toLowerCase(), { col: i, displayName });
+      }
+    }
+
+    // Check if a row with this date already exists (scan the date column)
+    let existingRowIndex = -1;
+    for (let r = 1; r < rows.length; r++) {
+      const cell = rows[r]?.[0];
+      let rowDateStr = '';
+
+      // Handle both string dates and serial number dates
+      if (typeof cell === 'number') {
+        const serialDate = this.serialDateToDate(cell);
+        if (serialDate) {
+          rowDateStr = `${serialDate.getMonth() + 1}/${serialDate.getDate()}/${serialDate.getFullYear()}`;
+        }
+      } else if (typeof cell === 'string') {
+        rowDateStr = cell.trim();
       }
 
-      // Format the date string for comparison
-      const dateStr = `${sessionDate.getMonth() + 1}/${sessionDate.getDate()}/${sessionDate.getFullYear()}`;
-
-      // Header row maps player names to their column index
-      const headerRow = rows[0] || [];
-      const playerColMap = new Map<
-        string,
-        { col: number; displayName: string }
-      >();
-      for (let i = 1; i < headerRow.length; i++) {
-        const displayName = String(headerRow[i] ?? '').trim();
-        if (displayName) {
-          playerColMap.set(displayName.toLowerCase(), { col: i, displayName });
-        }
+      if (rowDateStr === dateStr) {
+        existingRowIndex = r;
+        break;
       }
+    }
 
-      // Check if a row with this date already exists (scan the date column)
-      let existingRowIndex = -1;
-      for (let r = 1; r < rows.length; r++) {
-        const cell = rows[r]?.[0];
-        let rowDateStr = '';
-
-        // Handle both string dates and serial number dates
-        if (typeof cell === 'number') {
-          const serialDate = this.serialDateToDate(cell);
-          if (serialDate) {
-            rowDateStr = `${serialDate.getMonth() + 1}/${serialDate.getDate()}/${serialDate.getFullYear()}`;
-          }
-        } else if (typeof cell === 'string') {
-          rowDateStr = cell.trim();
-        }
-
-        if (rowDateStr === dateStr) {
-          existingRowIndex = r;
-          break;
-        }
+    // Find the rightmost column with data (for appending new players)
+    let maxCol = 1; // Column A holds the game date
+    for (const row of rows) {
+      if (row.length > maxCol) {
+        maxCol = row.length;
       }
+    }
 
-      // Find the rightmost column with data (for appending new players)
-      let maxCol = 1; // Column A holds the game date
-      for (const row of rows) {
-        if (row.length > maxCol) {
-          maxCol = row.length;
-        }
+    // Assign columns for any new players and build the row values
+    const rowValues: (string | number)[] = [];
+    let nextNewCol = maxCol;
+    const newPlayers: { name: string; col: number }[] = [];
+
+    for (const { playerName, amount } of playerAmounts) {
+      const key = playerName.trim().toLowerCase();
+      const mapped = playerColMap.get(key);
+      let col: number;
+      if (mapped) {
+        col = mapped.col;
+      } else {
+        col = nextNewCol;
+        nextNewCol++;
+        playerColMap.set(key, {
+          col,
+          displayName: playerName.trim(),
+        });
+        newPlayers.push({ name: playerName.trim(), col });
       }
+      rowValues[col] = amount;
+    }
 
-      // Assign columns for any new players and build the row values
-      const rowValues: (string | number)[] = [];
-      let nextNewCol = maxCol;
-      const newPlayers: { name: string; col: number }[] = [];
-
-      for (const pr of playerResults) {
-        const key = pr.playerName.trim().toLowerCase();
-        const mapped = playerColMap.get(key);
-        let col: number;
-        if (mapped) {
-          col = mapped.col;
-        } else {
-          col = nextNewCol;
-          nextNewCol++;
-          playerColMap.set(key, {
-            col,
-            displayName: pr.playerName.trim(),
-          });
-          newPlayers.push({ name: pr.playerName.trim(), col });
-        }
-        rowValues[col] = pr.netResult;
+    // Build the full row: date followed by one slot per player column
+    rowValues[0] = dateStr;
+    for (let i = 0; i < nextNewCol; i++) {
+      if (rowValues[i] === undefined) {
+        rowValues[i] = '';
       }
+    }
 
-      // Build the full row: date followed by one slot per player column
-      rowValues[0] = dateStr;
-      for (let i = 0; i < nextNewCol; i++) {
-        if (rowValues[i] === undefined) {
-          rowValues[i] = '';
-        }
+    // If there are new players (or the sheet is fresh), write the header row
+    if (newPlayers.length > 0) {
+      const headerValues: string[] = new Array<string>(nextNewCol).fill('');
+      headerValues[0] = 'Date';
+      for (const [, { displayName, col }] of playerColMap) {
+        headerValues[col] = displayName;
       }
+      const headerRange = `${sheetName}!A1:${this.columnIndexToLetter(nextNewCol - 1)}1`;
 
-      // If there are new players (or the sheet is fresh), write the header row
-      if (newPlayers.length > 0) {
-        const headerValues: string[] = new Array<string>(nextNewCol).fill('');
-        headerValues[0] = 'Date';
-        for (const [, { displayName, col }] of playerColMap) {
-          headerValues[col] = displayName;
-        }
-        const headerRange = `${sheetName}!A1:${this.columnIndexToLetter(nextNewCol - 1)}1`;
-
-        await this.makeRequest(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(headerRange)}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              range: headerRange,
-              majorDimension: 'ROWS',
-              values: [headerValues],
-            }),
-          },
-        );
-      }
-
-      // Determine which row to write (row 1 is the header)
-      const targetRowIndex =
-        existingRowIndex !== -1
-          ? existingRowIndex
-          : Math.max(1, rows.length); // Fresh sheet: first game goes in row 2
-      const rowNum = targetRowIndex + 1;
-      const colLetter = this.columnIndexToLetter(nextNewCol - 1);
-      const range = `${sheetName}!A${rowNum}:${colLetter}${rowNum}`;
-
-      // Write the row (either new or updating existing)
       await this.makeRequest(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(headerRange)}?valueInputOption=USER_ENTERED`,
         {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            range,
+            range: headerRange,
             majorDimension: 'ROWS',
-            values: [rowValues],
+            values: [headerValues],
           }),
         },
       );
-
-      console.log(
-        existingRowIndex !== -1
-          ? 'Successfully updated existing session in spreadsheet'
-          : 'Successfully appended new session to spreadsheet',
-      );
-    } catch (error) {
-      console.error('Error saving session to spreadsheet:', error);
-      throw error;
     }
+
+    // Determine which row to write (row 1 is the header)
+    const targetRowIndex =
+      existingRowIndex !== -1
+        ? existingRowIndex
+        : Math.max(1, rows.length); // Fresh sheet: first game goes in row 2
+    const rowNum = targetRowIndex + 1;
+    const colLetter = this.columnIndexToLetter(nextNewCol - 1);
+    const range = `${sheetName}!A${rowNum}:${colLetter}${rowNum}`;
+
+    // Write the row (either new or updating existing)
+    await this.makeRequest(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          range,
+          majorDimension: 'ROWS',
+          values: [rowValues],
+        }),
+      },
+    );
   }
 
   // Helper to convert serial date to Date object
@@ -623,6 +670,14 @@ class GoogleDriveService {
   private readonly TOTALS_SHEET_NAME = 'Totals';
   private readonly IN_PROGRESS_SHEET_NAME = 'In Progress';
   private readonly MICOUNTS_SHEET_NAME = 'Miscounts';
+  private readonly BUY_INS_SHEET_NAME = 'Buy-Ins';
+
+  // Sheets managed by the app that are never the user's results sheet
+  private readonly AUXILIARY_SHEET_NAMES = [
+    this.IN_PROGRESS_SHEET_NAME,
+    this.MICOUNTS_SHEET_NAME,
+    this.BUY_INS_SHEET_NAME,
+  ];
 
   // Helper to find or create a sheet by name
   private async ensureSheetExists(
@@ -684,9 +739,9 @@ class GoogleDriveService {
       return this.TOTALS_SHEET_NAME;
     }
 
-    // Otherwise return the first sheet that's not "In Progress"
+    // Otherwise return the first sheet that isn't managed by the app
     const firstSheet = metadata.sheets?.find(
-      (s: any) => s.properties.title !== this.IN_PROGRESS_SHEET_NAME,
+      (s: any) => !this.AUXILIARY_SHEET_NAMES.includes(s.properties.title),
     );
 
     return firstSheet?.properties.title || metadata.sheets[0].properties.title;
